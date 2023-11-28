@@ -24,7 +24,7 @@ from cycler import cycler
 from matplotlib.colors import CSS4_COLORS as COLORS
 rcParams.update({'font.size': 8, 'lines.linewidth': 1})
                                                                          #--- macros for users --------------
-POW = 2
+POW = 5
 NAMES = [
     "eta",
     "mu"
@@ -236,6 +236,10 @@ def f_comp_observations(time, raw):
             relaxation times of envelopes
         label : string
             label of the chosen envelope
+        converge : boolean
+            true whether the signal converges toward the mean value
+        initial_times : list (float)
+            the times from which it converges
     """
     try:
                                                                          # selects
@@ -260,97 +264,121 @@ def f_comp_observations(time, raw):
         gradient[np.nanargmax(raw)] = 0.
         gradient[np.nanargmin(raw)] = 0.
 
-                                                                         # check wether its converges or not
+                                                                         # check whether its converges or not
         anal_sup = hilbert(raw-mean)
         big_env_sup = np.abs(anal_sup)
         tmp_sel = time <= (time[0]+100)
-        mean_sup_ini = np.nanmean(big_env_sup[tmp_sel])
-        amp_ini = mean_sup_ini
+        #amp_ini = mean_sup_ini
+        nanmax_ini, nanmin_ini = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
+        amp_ini = nanmax_ini - nanmin_ini
+
         tmp_sel = ((time[0]+300) <= time) * (time <= (time[0]+400))
         mean_sup_infty = np.nanmean(big_env_sup[tmp_sel])
-        amp_infty = mean_sup_infty
+        #amp_infty = mean_sup_infty
+        nanmax_infty, nanmin_infty = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
+        amp_infty = nanmax_infty - nanmin_infty
 
-        if amp_ini>amp_infty:
-            print("converge")
-        else:
-            print("diverge")
+        converge = amp_ini/amp_infty > 1.05
 
         if False:
+            print(converge)
+
             fig, ax = plt.subplots()
             ax.plot(time, raw-mean)
             ax.plot(time, big_env_sup)
             #ax.plot(time, big_env_inf)
 
-            ax.plot([time[0], time[0]+100], [mean_sup_ini]*2)
-            #ax.plot([time[0], time[0]+100], [mean_inf_ini]*2)
-            ax.plot([time[0]+300, time[0]+400], [mean_sup_infty]*2)
-            #ax.plot([time[0]+300, time[0]+400], [mean_inf_infty]*2)
+            ax.plot([time[0], time[0]+100], [nanmax_ini]*2)
+            ax.plot([time[0], time[0]+100], [nanmin_ini]*2)
+            ax.plot([time[0]+300, time[0]+400], [nanmax_infty]*2)
+            ax.plot([time[0]+300, time[0]+400], [nanmin_infty]*2)
 
             plt.show()
             sys.exit()
-    
+
         selpos = ((raw - mean) >= 0.)
         selneg = ((raw - mean) <= 0.)
         changing_signs = (np.roll(gradient, -1) * gradient)<=0.
         sel_sup = changing_signs * selpos
         sel_inf = changing_signs * selneg
-    
+
         tinf = time[sel_inf]
         rawinf = raw[sel_inf]
-        sel_inf_2 = np.logical_or(
-            ((np.roll(rawinf, -1) - rawinf)>=0.),
-            np.abs(rawinf-mean)<0.1
-        )
-        sel_inf_2[0] = rawinf[0] <= rawinf[1]
+        if converge:
+            sel_inf_2 = np.logical_or(
+                ((np.roll(rawinf, -1) - rawinf)>=0.),
+                np.abs(rawinf-mean)<0.1
+            )
+            sel_inf_2[0] = rawinf[0] <= rawinf[1]
+        else:
+            sel_inf_2 = [True]*tinf.size
         rawinf = rawinf[sel_inf_2]
         tinf = tinf[sel_inf_2]
-    
+
         tsup = time[sel_sup]
         rawsup = raw[sel_sup]
-        sel_sup_2 = np.logical_or(
-            ((np.roll(rawsup, -1) - rawsup)<=0.),
-            np.abs(rawsup-mean)<0.1
-        )
-        sel_sup_2[0] = rawinf[0] >= rawinf[1]
+        if converge:
+            sel_sup_2 = np.logical_or(
+                ((np.roll(rawsup, -1) - rawsup)<=0.),
+                np.abs(rawsup-mean)<0.1
+            )
+            sel_sup_2[0] = rawinf[0] >= rawinf[1]
+        else:
+            sel_sup_2 = [True]*tsup.size
         rawsup = rawsup[sel_sup_2]
         tsup = tsup[sel_sup_2]
-    
+
         xi = np.interp(time, tinf, rawinf)
         xs = np.interp(time, tsup, rawsup)
-    
+
         xi = np.fmin(xi, mean)
         xs = np.fmax(xs, mean)
-    
+
         relax_times = []
         envs = [xi, xs]
         ress = []
         raws = [rawinf, rawsup]
-        tss = [tinf, tsup]
         labels = ["inf", "sup"]
+        initial_times = []
         for ii, amp_env in enumerate(envs):
             notnan = ~np.isnan(amp_env)
             tmpraw = raws[ii]
-            ts = tss[ii]
-    
+
             nanmax, nanmin = np.nanmax(amp_env), np.nanmin(amp_env)
-            maxtime = time[notnan][0] + 1/main_freq
-            tmpsel = time <= maxtime
-    
-            #res = linregress(time[tmpsel * notnan], amp_env[tmpsel * notnan])
-            slope = (tmpraw[1] - tmpraw[0])/(ts[1]-ts[0])
+            if ii==0:
+                if converge:
+                    y = nanmax
+                    scale = 1.
+                else:
+                    y = nanmin
+                    scale = -1.
+            else:
+                if converge:
+                    y = nanmin
+                    scale = -1.
+                else:
+                    y = nanmax
+                    scale = 1.
+
+            Delta = np.gradient(amp_env, DT)
+            Delta[np.logical_not(np.sign(Delta)==scale)] = 0.
+
+            argD = np.nanargmax(np.abs(Delta))
+            slope = Delta[argD]
+            not_zero = np.abs(Delta)>INFTY_SMALL
+
+            tmpraw = amp_env[not_zero]
+            ts = time[not_zero]
             intercept = tmpraw[0] - slope*ts[0]
             res = {"slope":slope, "intercept":intercept}
-    
+
             tmp = res["intercept"] + res["slope"]*time
-            if ii==0:
-                tmpsel = tmp <= nanmax
-            else:
-                tmpsel = tmp >= nanmin
-    
-            t = (np.nanmax(time[tmpsel])-time[0])
+
+            t = (y - res["intercept"]) / res["slope"] - ts[0]
             relax_times.append(t)
+            initial_times.append(ts[0])
             ress.append(res)
-    
+
         label = labels[np.argmin(relax_times)]
         relax_time = np.min(relax_times)
                                                                          # compute the main amplitude
@@ -368,7 +396,9 @@ def f_comp_observations(time, raw):
             "xs":xs,
             "ress":ress,
             "relax_times":relax_times,
-            "label":label
+            "label":label,
+            "converge":converge,
+            "initial_times":initial_times
         }
 
     except Exception:
@@ -754,6 +784,10 @@ def f_plot_main_details_IDEE(time, raw):
     ress = buffs["ress"]
     relax_times = buffs["relax_times"]
     label = buffs["label"]
+    converge = buffs["converge"]
+    initial_times = buffs["initial_times"]
+
+    t0 = initial_times[0] if label=="inf" else initial_times[1]
     labels = ["inf", "sup"]
     selectr = time <= (time[0] + WINDOW_RELAX)
                                                                          #
@@ -767,10 +801,10 @@ def f_plot_main_details_IDEE(time, raw):
     axlam.plot(timest, mean*np.ones(sst))
                                                                          # plot relaxation time
     hr = 0.5*np.amax(np.abs(raw-mean)[selectr])
-    line, = axlam.plot([time[0]+relax_time]*2, [mean-hr, mean+hr])
+    line, = axlam.plot([t0+relax_time]*2, [mean-hr, mean+hr])
     for ii in range(2):
         axlam.plot(
-            [time[0]+(2+ii)*relax_time]*2,
+            [t0+(2+ii)*relax_time]*2,
             [mean-hr, mean+hr],
             color=line.get_color(),
             linestyle=line.get_linestyle()
@@ -785,14 +819,20 @@ def f_plot_main_details_IDEE(time, raw):
         linestyle=line.get_linestyle()
     )
                                                                          # plots in axlam1
+                                                                         # inf
     tmp = ress[0]["intercept"] + ress[0]["slope"]*time[st]
-    tmpsel = tmp <= np.nanmax(xi)
-    lineres, = axlam1.plot(timest[tmpsel], tmp[tmpsel], color="C2")
-    axlam1.plot(timest, np.nanmax(xi)*np.ones(sst),
-        color=lineres.get_color(),
-        linestyle=lineres.get_linestyle(),
+    nanminxi = np.nanmin(xi)
+    nanmaxxi = np.nanmax(xi)
+    if converge:
+        tmpsel = tmp <= nanmaxxi
+        toplot = nanmaxxi
+    else:
+        tmpsel = tmp >= nanminxi
+        toplot = nanminxi
+    lineres, = axlam1.plot(timest[tmpsel], tmp[tmpsel],
+        color="C2"
     )
-    axlam1.plot(timest, np.nanmin(xs)*np.ones(sst),
+    axlam1.plot(timest, toplot*np.ones(sst),
         color=lineres.get_color(),
         linestyle=lineres.get_linestyle(),
     )
@@ -801,15 +841,39 @@ def f_plot_main_details_IDEE(time, raw):
             linestyle=line.get_linestyle(),
             label=r"$a(t)$"
     )
+    axlam1.plot(
+        [initial_times[0]]*2,
+        [nanminxi, nanmaxxi],
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
+    )
+                                                                         # sup
     tmp = ress[1]["intercept"] + ress[1]["slope"]*timest
-    tmpsel = tmp >= np.nanmin(xs)
+    nanminxs = np.nanmin(xs)
+    nanmaxxs = np.nanmax(xs)
+    if converge:
+        tmpsel = tmp >= nanminxs
+        toplot = nanminxs
+    else:
+        tmpsel = tmp <= nanmaxxs
+        toplot = nanmaxxs
     axlam1.plot(timest[tmpsel], tmp[tmpsel],
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
+    )
+    axlam1.plot(timest, toplot*np.ones(sst),
         color=lineres.get_color(),
         linestyle=lineres.get_linestyle(),
     )
     axlam1.plot(timest, xs[st],
             color=line.get_color(),
             linestyle=line.get_linestyle(),
+    )
+    axlam1.plot(
+        [initial_times[1]]*2,
+        [nanminxs, nanmaxxs],
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
     )
                                                                          # plot amplitude
     line, = axlam.plot(
@@ -825,17 +889,17 @@ def f_plot_main_details_IDEE(time, raw):
                                                                          # plot text relaxation time
     props = dict(boxstyle='round', facecolor='white', alpha=1.)
     line, = axlam.plot(
-        [time[0]+relax_time, time[0]+1.5*relax_time],
+        [t0+relax_time, t0+1.5*relax_time],
         [mean+hr, mean+1.2*hr]
     )
     axlam.plot(
-        [time[0]+1.5*relax_time, time[0]+2.*relax_time],
+        [t0+1.5*relax_time, t0+2.*relax_time],
         [mean+1.2*hr, mean+hr],
         color=line.get_color(),
         linestyle=line.get_linestyle()
     )
     axlam.text(
-        time[0]+1.5*relax_time,
+        t0+1.5*relax_time,
         mean+1.2*hr,
         r'$\tau = \min(\tau_{inf}, \tau_{sup}) = %.1f$ y' % relax_time,
         horizontalalignment='center',
@@ -911,7 +975,7 @@ def f_plot_main_details_IDEE(time, raw):
             bbox=props,
         )
         axlam1.text(
-            time[0] + relax_times[ii],
+            initial_times[ii] + relax_times[ii],
             mean + (-1)**ii * 0.01 * yrange,
             r'$\tau_{'+'{}'.format(st) + '}= %.1f$ y' % (relax_times[ii]),
             horizontalalignment='right' if ((tmpb and (ii==0)) or (not tmpb and (ii==1))) else 'left',
@@ -937,7 +1001,7 @@ def f_plot_main_details_IDEE(time, raw):
 
     return figlam, axlam, axlam1
 
-def f_plot_IDEE(file_name, figure_name, savefig=False):
+def f_plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
     """
     This function plots the main variables of IDEE.
 
@@ -945,17 +1009,27 @@ def f_plot_IDEE(file_name, figure_name, savefig=False):
 
     Input
     -----
+    path : string
+        the path of the data
     file_name : string
-        path of the file
+        name of file
     figure_name : string
-        figure path
+        name of figure 'lambda'
+    figure_name_all : string
+        name of figure 'all'
     savefig : boolean
         True if we save the figure, show if False
     """
+    badpath = road.join(path, "png_bad")
+    goodpath = road.join(path, "png_good")
+    if not road.exists(badpath):
+        os.mkdir(badpath)
+    if not road.exists(goodpath):
+        os.mkdir(goodpath)
                                                                          # load data
-    data = np.loadtxt(file_name, skiprows=1)
+    data = np.loadtxt(road.join(path, file_name), skiprows=1)
                                                                          # load variable names
-    f = open(file_name, "r")
+    f = open(road.join(path, file_name), "r")
     lvars = f.readline()
     f.close()
     lvars = lvars.split('  ')[:-1]
@@ -1011,34 +1085,39 @@ def f_plot_IDEE(file_name, figure_name, savefig=False):
     for j in range(NUMCOLS):
         ax = axes[nbrows-1, j]
         ax.set_xlabel("time")
+    ax.set_xlim(time[0], LAST_YEAR)
 
     if not problem_detected:
         for axl in [axlam, axlam1]:
             axl.set_xlim(time[0], LAST_YEAR)
             axl.set_xlabel(r"$t$ (y)")
-            axl.legend()
         axlam.set_ylabel(r"$\lambda$ (%)")
+        axlam1.legend(framealpha=1.)
+        axlam.legend(framealpha=1., ncol=3)
 
     if savefig:
+
         if not problem_detected:
+            name = road.join(goodpath, figure_name)
             print("saving of {}".format(figure_name))
-            plt.savefig(figure_name,
+            plt.savefig(name,
                 bbox_inches="tight", pad_inches=0.1,
             )
+            plt.close(figlam)
+            name = road.join(goodpath, figure_name_all)
+        else:
+            name = road.join(badpath, figure_name_all)
 
-        ax.set_xlim(time[0], LAST_YEAR)
-        print("saving of {}".format(figure_name[:-3]+"_all.png"))
-        plt.savefig(figure_name[:-3]+"_all.png",
+        print("saving of {}".format(figure_name_all))
+        plt.savefig(name,
             bbox_inches="tight", pad_inches=0.1,
         )
+        plt.close(fig)
     else:
                                                                          # show
         ax.set_xlim(time[0], LAST_YEAR)
         plt.show()
-
-    plt.close(fig)
-    if not problem_detected:
-        plt.close(figlam)
+        plt.close('all')
 
 def f_plot_map(badc, goodc):
     """
