@@ -10,14 +10,71 @@ description: This module is can be used to run the sensitivity analysis of the m
 import sys, os, shutil
 import subprocess
 import numpy as np
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 from SALib.sample import saltelli
 from SALib.analyze import sobol
 from SALib import ProblemSpec
 from timeit import default_timer as timer
 from scipy.signal import hilbert
+from scipy.stats import linregress
 import os.path as road
-                                                                         #--- macros ------------------------
+from cycler import cycler
+from matplotlib.colors import CSS4_COLORS as COLORS
+rcParams.update({'font.size': 8, 'lines.linewidth': 1})
+                                                                         #--- macros for users --------------
+POW = 2
+NAMES = [
+    "eta",
+    "mu"
+]
+BOUNDS = [
+    [0.16, 0.22],
+    [1.5, 2.1]
+]
+OUTPUTS = [
+"mean_lambda",
+"mean_omega",
+"main_frequency_of_cycles"
+]
+PLOT_LIST = [
+    'capital',
+    'g0',
+    'omega',
+    'debtratio',
+    'lambda',
+    'wage_growth',
+    'productivity_growth',
+    'smallpi',
+    'kappa',
+    'dividends_ratio',
+    'inflation',
+    'rb',
+]
+NUMCOLS = 3
+LAST_YEAR = 3000
+TMAX = 3000
+                                                                         #--- macros for devs ---------------
+RAISE = True
+COLORS = [
+    COLORS["black"],
+    COLORS["dimgray"],
+    COLORS["gray"],
+    COLORS["darkgray"],
+]
+LS = ['-', '--', ':', '-.']
+cc = []
+ls = []
+for j in LS:
+    for i in COLORS:
+        cc.append(i)
+        ls.append(j)
+
+plt.rc('axes',
+    prop_cycle=(cycler(color=cc) +
+                cycler(linestyle=ls))
+)
 IDEE = "./gemmes"
 XMP_FILE = "gemmes.dat.example"
 DAT_FILE = "gemmes.dat.World_default"
@@ -27,12 +84,41 @@ DIR_LOC = os.getcwd()
 DIR_SAVE = road.join(DIR_LOC, "outputs_")
 DT = 1./12
 INFTY_SMALL = 1.E-12
+EPSILON = 1.E-2
 
-NAMES = ["eta", "mu"]
-BOUNDS = [[0.16, 1.],
-          [1.5, 2.5]]
-OUTPUTS = ["mean_lambda", "mean_omega", "main_frequency_of_cycles"]
+WINDOW_FREQ = 100
+WINDOW_RELAX = 100
+WINDOW_AMP = [400, 500]
+WINDOW_MEAN = [400, 500]
+A4W = 8.27
                                                                          #--- functions ---------------------
+def f_check_bad_attractor(data, indices):
+    """
+    This function checks whether the simulation converges toward the bad attractor.
+
+    ...
+
+    Input
+    -----
+    data : numpy.ndarray (float)
+        the array containing the simulation's data
+    indices : list (float)
+        the array of tricky variables' indices like lambda, capital etc.
+
+    ...
+
+    Output
+    ------
+    is_bad : boolean
+        True wheter it converges toard the bad attractor
+    """
+    is_bad = False
+    for ind in indices:
+        raw = data[:, ind]
+        is_bad = is_bad or (raw<INFTY_SMALL).any() or np.isnan(raw).any()
+
+    return is_bad
+
 def f_check_dir():
     """
     Check wether the outputs directory exists.
@@ -55,8 +141,299 @@ def f_check_dir():
 
     return name_dir
 
+def f_comp_growth(data, nb):
+    """
+    Computes the growth rate of the array data.
+
+    ...
+
+    Input
+    -----
+    data : numpy.ndarray
+        the raw data
+    nb : integer
+        the window length
+
+    ...
+
+    Output
+    ------
+    growth : numpy.ndarray
+        the growth rate (same size filled with zeros)
+    """
+    g = (np.roll(data, -1) - data)/DT/data
+    growth = np.convolve(g[::-1], np.ones(nb), "valid") / nb
+    growth[0] = np.nan
+    growth = np.hstack(([np.nan]*(nb-1), growth))[::-1]
+
+    return growth
+
+def f_comp_main_freq(signal):
+    """
+    Computes the main frequency of the signal.
+
+    ...
+
+    Input
+    -----
+    signal : numpy.ndarray
+        the signal
+
+    ...
+
+    Output
+    ------
+    main_freq : float
+        the main frequency
+    sp : numpy.ndarray
+        sample of powers
+    freq : numpy.ndarray
+        frequencies
+    """
+    sp = np.fft.rfft(signal)
+    nf = np.argmax(np.absolute(sp)[1:])
+    freq = np.fft.rfftfreq(signal.size, d=DT)[1:]
+    main_freq = freq[nf]
+
+    return main_freq, sp, freq
+
+def f_comp_observations(time, raw):
+    """
+    Compute the observations on the lambda variable.
+
+    ...
+
+    Input
+    -----
+    time : numpy.ndarray (float)
+        time
+    raw : numpy.ndarray (float)
+        the raw signal (most of the time 'lambda')
+
+    ...
+
+    Output
+    ------
+    outs : dict (*)
+        mean : (float)
+            mean at the end
+        main_freq : (float)
+            main frequency
+        relax_time : (float)
+            relaxation time
+        damp : (float)
+            amplitude
+    buffs : dict (*)
+        delay : (float)
+            delay between time[0] and time[argmax(raw)]
+        xi : numpy.ndarray (float)
+            lower envelope
+        xs : numpy.ndarray (float)
+            upper envelope
+        ress : list (numpy.ndarray (float))
+            linear regressions of envelopes
+        relax_times : list (float)
+            relaxation times of envelopes
+        label : string
+            label of the chosen envelope
+    """
+    try:
+                                                                         # selects
+        selectm = (time >= (time[0]+WINDOW_MEAN[0])) * \
+            (time <= (time[0]+WINDOW_MEAN[1]))
+        selectf = time <= (time[0] + WINDOW_FREQ)
+        selectamp = (time >= (time[0]+WINDOW_AMP[0])) * \
+            (time <= (time[0]+WINDOW_AMP[1]))
+                                                                         # compute the mean
+        mean = np.mean(raw[selectm])
+        ismean = (np.abs(raw - mean)<0.01)
+                                                                         # compute the main frequency
+        main_freq, sp, f = f_comp_main_freq(raw[selectf])
+        Tmax = time[selectf]
+        Tmax = Tmax[np.argmax(raw[selectf])]
+        delay = Tmax - time[0]
+                                                                         # compute the relaxation time
+        gradient = np.gradient(
+            raw + 0.01*np.sin(2.*np.pi*main_freq*(time-delay)),
+            DT
+        )
+        gradient[np.nanargmax(raw)] = 0.
+        gradient[np.nanargmin(raw)] = 0.
+
+                                                                         # check wether its converges or not
+        anal_sup = hilbert(raw-mean)
+        big_env_sup = np.abs(anal_sup)
+        tmp_sel = time <= (time[0]+100)
+        mean_sup_ini = np.nanmean(big_env_sup[tmp_sel])
+        amp_ini = mean_sup_ini
+        tmp_sel = ((time[0]+300) <= time) * (time <= (time[0]+400))
+        mean_sup_infty = np.nanmean(big_env_sup[tmp_sel])
+        amp_infty = mean_sup_infty
+
+        if amp_ini>amp_infty:
+            print("converge")
+        else:
+            print("diverge")
+
+        if False:
+            fig, ax = plt.subplots()
+            ax.plot(time, raw-mean)
+            ax.plot(time, big_env_sup)
+            #ax.plot(time, big_env_inf)
+
+            ax.plot([time[0], time[0]+100], [mean_sup_ini]*2)
+            #ax.plot([time[0], time[0]+100], [mean_inf_ini]*2)
+            ax.plot([time[0]+300, time[0]+400], [mean_sup_infty]*2)
+            #ax.plot([time[0]+300, time[0]+400], [mean_inf_infty]*2)
+
+            plt.show()
+            sys.exit()
+    
+        selpos = ((raw - mean) >= 0.)
+        selneg = ((raw - mean) <= 0.)
+        changing_signs = (np.roll(gradient, -1) * gradient)<=0.
+        sel_sup = changing_signs * selpos
+        sel_inf = changing_signs * selneg
+    
+        tinf = time[sel_inf]
+        rawinf = raw[sel_inf]
+        sel_inf_2 = np.logical_or(
+            ((np.roll(rawinf, -1) - rawinf)>=0.),
+            np.abs(rawinf-mean)<0.1
+        )
+        sel_inf_2[0] = rawinf[0] <= rawinf[1]
+        rawinf = rawinf[sel_inf_2]
+        tinf = tinf[sel_inf_2]
+    
+        tsup = time[sel_sup]
+        rawsup = raw[sel_sup]
+        sel_sup_2 = np.logical_or(
+            ((np.roll(rawsup, -1) - rawsup)<=0.),
+            np.abs(rawsup-mean)<0.1
+        )
+        sel_sup_2[0] = rawinf[0] >= rawinf[1]
+        rawsup = rawsup[sel_sup_2]
+        tsup = tsup[sel_sup_2]
+    
+        xi = np.interp(time, tinf, rawinf)
+        xs = np.interp(time, tsup, rawsup)
+    
+        xi = np.fmin(xi, mean)
+        xs = np.fmax(xs, mean)
+    
+        relax_times = []
+        envs = [xi, xs]
+        ress = []
+        raws = [rawinf, rawsup]
+        tss = [tinf, tsup]
+        labels = ["inf", "sup"]
+        for ii, amp_env in enumerate(envs):
+            notnan = ~np.isnan(amp_env)
+            tmpraw = raws[ii]
+            ts = tss[ii]
+    
+            nanmax, nanmin = np.nanmax(amp_env), np.nanmin(amp_env)
+            maxtime = time[notnan][0] + 1/main_freq
+            tmpsel = time <= maxtime
+    
+            #res = linregress(time[tmpsel * notnan], amp_env[tmpsel * notnan])
+            slope = (tmpraw[1] - tmpraw[0])/(ts[1]-ts[0])
+            intercept = tmpraw[0] - slope*ts[0]
+            res = {"slope":slope, "intercept":intercept}
+    
+            tmp = res["intercept"] + res["slope"]*time
+            if ii==0:
+                tmpsel = tmp <= nanmax
+            else:
+                tmpsel = tmp >= nanmin
+    
+            t = (np.nanmax(time[tmpsel])-time[0])
+            relax_times.append(t)
+            ress.append(res)
+    
+        label = labels[np.argmin(relax_times)]
+        relax_time = np.min(relax_times)
+                                                                         # compute the main amplitude
+        damp = 0.5*(np.mean(xs[selectamp]) - np.mean(xi[selectamp]))
+
+        outs = {
+            "mean":mean,
+            "main_freq":main_freq,
+            "relax_time":relax_time,
+            "damp":damp
+        }
+        buffs = {
+            "delay":delay,
+            "xi":xi,
+            "xs":xs,
+            "ress":ress,
+            "relax_times":relax_times,
+            "label":label
+        }
+
+    except Exception:
+        print("Problem in 'f_comp_observations'")
+        if RAISE:
+            print(outs)
+            print(buffs)
+
+            raise
+
+    return outs, buffs
+
 def f_empty(a=0,b=0,c=0,d=0,e=0,f=0):
     pass
+
+def f_extend_IDEE(lvars, data):
+    """
+    This function adds new fields compputed from the raw data.
+
+    ...
+
+    Input
+    -----
+    lvars : list (string)
+        the list of variables names
+    data : numpy.ndarray (float)
+        the raw data
+
+    ...
+
+    Output
+    ------
+    lvars : list (float)
+        the extended list of variables
+    data : numpy.ndarray (float)
+        the extended data
+    """
+    nb = int(1./DT)
+    nbrows = data.shape[0]
+                                                                         # append investment ratio kappa
+    lvars.append("kappa")
+    new = np.zeros((nbrows,1))
+    new[:,0] = data[:,36] / data[:,22]
+    data = np.hstack((data, new))
+                                                                         # append dividends ratio
+    lvars.append("dividends_ratio")
+    new = np.zeros((nbrows,1))
+    new[:,0] = data[:,27] - data[:,37] / data[:,22] / data[:,6]
+    data = np.hstack((data, new))
+                                                                         # append wage growth rate
+    lvars.append("wage_growth")
+    new = np.zeros((nbrows,1))
+    new[:,0] = f_comp_growth(data[:,4], nb)
+    data = np.hstack((data, new))
+                                                                         # append productivity growth
+    lvars.append("productivity_growth")
+    new = np.zeros((nbrows,1))
+    new[:,0] = f_comp_growth(data[:,5], nb)
+    data = np.hstack((data, new))
+                                                                         # append population growth
+    lvars.append("population_growth")
+    new = np.zeros((nbrows,1))
+    new[:,0] = f_comp_growth(data[:,2], nb)
+    data = np.hstack((data, new))
+    return lvars, data
 
 def f_IDEE(params, n, name_dir):
     """
@@ -78,6 +455,7 @@ def f_IDEE(params, n, name_dir):
     shutil.copyfile(XMP_FILE, DAT_FILE)
     f = open(DAT_FILE, 'a')
     f.write(" region%dt={:.6f}\n".format(DT))
+    f.write(" region%Tmax={:.6f}\n".format(TMAX))
     for k,v in params.items():
         f.write(" region%{}={:.6f}\n".format(k,v))
     f.write('\n/\n')
@@ -158,8 +536,8 @@ def f_make_outputs(path, plot_freq=False):
     """
     func = f_plot_main_freq if plot_freq else f_empty
 
-    sample = np.loadtxt(road.join(path, "sample.dat"))
-    nums = sample.shape[0]
+    samples = np.loadtxt(road.join(path, "sample.dat"))
+    nums = samples.shape[0]
 
     mean_l = []
     mean_o = []
@@ -173,22 +551,21 @@ def f_make_outputs(path, plot_freq=False):
             OUT_FILE+'_set{:d}'.format(n)),
             skiprows=1
         )
+        sample = [n] + samples[n,:].tolist()
 
         time = data[:,0]
         omega = data[:,18]
         lambd = data[:,19]
                                                                          # get means
-        select = time>2800
+        select = (time >= (time[0]+WINDOW_MEAN[0])) * \
+            (time <= (time[0]+WINDOW_MEAN[1]))
         m_l = np.mean(lambd[select])
         m_o = np.mean(omega[select])
                                                                          # get the main frequency
-        select = time<2200
-        sp = np.fft.rfft(omega[select])
-        nf = np.argmax(np.absolute(sp)[1:])
-        freq = np.fft.rfftfreq(omega[select].size, d=DT)[1:]
-        main_freq = freq[nf]
+        select = time <= (time[0] + WINDOW_FREQ)
+        main_freq, sp, freq = f_comp_main_freq(omega[select])
                                                                          # plot of required
-        func(main_freq, sp, freq, omega, time)
+        func(main_freq, sp, freq, omega, time, sample)
 
         mean_l.append(m_l)
         mean_o.append(m_o)
@@ -279,7 +656,7 @@ def f_load_sa_class(path):
 
     return sa_class
 
-def f_plot_main_freq(main_freq, sp, freq, signal, time):
+def f_plot_main_freq(main_freq, sp, freq, signal, time, sample):
     """
     Plot the approximated signal thanks to the main frequency.
 
@@ -297,6 +674,8 @@ def f_plot_main_freq(main_freq, sp, freq, signal, time):
         the original signal
     time : numpy.ndarray (float)
         the time
+    sample : numpy.ndarray
+        the array of parameters, first element is the sample number
     """
 
     fig, axes = plt.subplots(nrows=2, ncols=1)
@@ -309,10 +688,10 @@ def f_plot_main_freq(main_freq, sp, freq, signal, time):
     analytic_signal = hilbert(signal - mean_s)
     amplitude_envelope = mean_s + np.abs(analytic_signal)
 
-    amp = np.max(np.abs(signal) - mean_s)
+    amp = 0.5*np.max(np.abs(signal) - mean_s)
     approx_s = mean_s + amp*np.sin(2.*np.pi*main_freq*time)
     Tmax = time[np.argmax(signal/amplitude_envelope/time)]
-    delay = Tmax - (time[0] + 1./4/main_freq)
+    delay = Tmax - time[0]
 
     axes[1].plot(time, signal, label='original signal')
     #axes[1].plot(time, amplitude_envelope, label='signal envelope')
@@ -321,11 +700,345 @@ def f_plot_main_freq(main_freq, sp, freq, signal, time):
     axes[1].set_ylabel("main frequency signal")
     axes[1].legend()
 
+    print(sample[0], sample[1:])
     plt.show()
     plt.close(fig)
-    rep = input("Press Enter to continue, Q to quit: ")
+    rep = input("  Press Enter to continue, Q to quit: ")
     if rep=="Q":
-        sys.exit("Execution stopped by User")
+        sys.exit("  Execution stopped by User")
+
+def f_plot_main_details_IDEE(time, raw):
+    """
+    Return a figure that shows the main detail of the computed quantities
+    for the SA of IDEE.
+
+    ...
+
+    Input
+    -----
+    time : numpy.ndarray (float)
+        time
+    raw : numpy.ndarray (float)
+        the raw signal (most of the time 'lambda')
+
+    ...
+
+    Output
+    ------
+    figlam : matplotlib.pyplot.figure
+        figure with all details
+    axlam : matplotlib.axes.Axes
+        left figure with details
+    axlam1 : matplotlib.axes.Axes
+        right figure with linear regressions of envelopes
+    """
+    figlam = plt.figure(figsize=(A4W, 3.5))
+    gs = GridSpec(
+        nrows=1,
+        ncols=2,
+        width_ratios=[2, 1],
+        wspace=0.1,
+    )
+    axlam = figlam.add_subplot(gs[:, :-1])
+    axlam1 = figlam.add_subplot(gs[0,-1])
+                                                                         # compute other observation quantities
+    outs, buffs = f_comp_observations(time, raw)
+
+    mean = outs["mean"]
+    main_freq = outs["main_freq"]
+    relax_time = outs["relax_time"]
+    damp = outs["damp"]
+    delay = buffs["delay"]
+    xi = buffs["xi"]
+    xs = buffs["xs"]
+    ress = buffs["ress"]
+    relax_times = buffs["relax_times"]
+    label = buffs["label"]
+    labels = ["inf", "sup"]
+    selectr = time <= (time[0] + WINDOW_RELAX)
+                                                                         #
+                                                                         # plots
+    st = time<=LAST_YEAR
+    timest = time[st]
+    sst = timest.size
+                                                                         # plot raw data
+    axlam.plot(timest, raw[st], label="raw_data")
+                                                                         # plot mean
+    axlam.plot(timest, mean*np.ones(sst))
+                                                                         # plot relaxation time
+    hr = 0.5*np.amax(np.abs(raw-mean)[selectr])
+    line, = axlam.plot([time[0]+relax_time]*2, [mean-hr, mean+hr])
+    for ii in range(2):
+        axlam.plot(
+            [time[0]+(2+ii)*relax_time]*2,
+            [mean-hr, mean+hr],
+            color=line.get_color(),
+            linestyle=line.get_linestyle()
+        )
+                                                                         # plot approximated signal
+    approx = mean + damp*np.sin(2.*np.pi*main_freq*(timest-delay))
+    axlam.plot(timest, approx, label=r"$M + (A/2) \sin ( 2 \pi f t )$")
+                                                                         # plot envelope
+    line, = axlam.plot(timest, xs[st], label="$a(t)$ envelope")
+    axlam.plot(timest, xi[st],
+        color=line.get_color(),
+        linestyle=line.get_linestyle()
+    )
+                                                                         # plots in axlam1
+    tmp = ress[0]["intercept"] + ress[0]["slope"]*time[st]
+    tmpsel = tmp <= np.nanmax(xi)
+    lineres, = axlam1.plot(timest[tmpsel], tmp[tmpsel], color="C2")
+    axlam1.plot(timest, np.nanmax(xi)*np.ones(sst),
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
+    )
+    axlam1.plot(timest, np.nanmin(xs)*np.ones(sst),
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
+    )
+    axlam1.plot(timest, xi[st],
+            color=line.get_color(),
+            linestyle=line.get_linestyle(),
+            label=r"$a(t)$"
+    )
+    tmp = ress[1]["intercept"] + ress[1]["slope"]*timest
+    tmpsel = tmp >= np.nanmin(xs)
+    axlam1.plot(timest[tmpsel], tmp[tmpsel],
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
+    )
+    axlam1.plot(timest, xs[st],
+            color=line.get_color(),
+            linestyle=line.get_linestyle(),
+    )
+                                                                         # plot amplitude
+    line, = axlam.plot(
+        [time[0]+WINDOW_AMP[0], time[0]+WINDOW_AMP[1]],
+        [mean+damp, mean+damp],
+    )
+    axlam.plot(
+        [time[0]+WINDOW_AMP[0], time[0]+WINDOW_AMP[1]],
+        [mean-damp, mean-damp],
+        color=line.get_color(),
+        linestyle=line.get_linestyle()
+    )
+                                                                         # plot text relaxation time
+    props = dict(boxstyle='round', facecolor='white', alpha=1.)
+    line, = axlam.plot(
+        [time[0]+relax_time, time[0]+1.5*relax_time],
+        [mean+hr, mean+1.2*hr]
+    )
+    axlam.plot(
+        [time[0]+1.5*relax_time, time[0]+2.*relax_time],
+        [mean+1.2*hr, mean+hr],
+        color=line.get_color(),
+        linestyle=line.get_linestyle()
+    )
+    axlam.text(
+        time[0]+1.5*relax_time,
+        mean+1.2*hr,
+        r'$\tau = \min(\tau_{inf}, \tau_{sup}) = %.1f$ y' % relax_time,
+        horizontalalignment='center',
+        verticalalignment='center',
+        bbox=props
+    )
+                                                                         # plot text main frequency
+    axlam.plot(
+        [time[0]+1/main_freq+delay, time[0]+1.5/main_freq+delay],
+        [mean+damp, mean+1.25*damp+1.],
+        color=line.get_color(),
+        linestyle=line.get_linestyle()
+    )
+    axlam.plot(
+        [time[0]+1.5/main_freq+delay, time[0]+2/main_freq+delay],
+        [mean+1.25*damp+1., mean+damp],
+        color=line.get_color(),
+        linestyle=line.get_linestyle()
+    )
+    axlam.text(
+        time[0]+1.5/main_freq+delay,
+        mean+1.25*damp + 1.,
+        r'$f^{-1} = %.1f$ y' % (1./main_freq),
+        horizontalalignment='center',
+        verticalalignment='center',
+        bbox=props
+    )
+                                                                         # plot text amplitude
+    axlam.plot(
+        [time[0]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1])]*2,
+        [mean+damp, mean],
+        color=line.get_color(),
+        linestyle=line.get_linestyle()
+    )
+    axlam.plot(
+        [time[0]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1])]*2,
+        [mean, mean-damp],
+        color=line.get_color(),
+        linestyle=line.get_linestyle()
+    )
+    axlam.text(
+        time[0]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1]),
+        mean,
+        r'$A = %.1f$' % (2*damp) + "%",
+        horizontalalignment='center',
+        verticalalignment='center',
+        bbox=props
+    )
+                                                                         # plot text mean value
+    axlam.text(
+        LAST_YEAR-2/main_freq,
+        mean,
+        r'$M = %.1f$' % (mean) + "%",
+        horizontalalignment='left',
+        verticalalignment='center',
+        bbox=props,
+    )
+                                                                         # plot text in axlam1
+    axlam1.set_ylim(axlam.get_ylim())
+    ylims = axlam1.get_ylim()
+    xlims = axlam1.get_xlim()
+    mean_t = np.mean(relax_times)
+    xcoord = time[0] + 0.25*(xlims[1]-xlims[0])
+    yrange = ylims[1] - ylims[0]
+    tmpb = label=="inf"
+    for ii, st in enumerate(labels):
+        axlam1.text(
+            xcoord,
+            ylims[ii] + (-1)**ii * 0.05 * yrange,
+            r'$\alpha_{'+'{}'.format(st) + '}= %.1e$' % (ress[ii]["slope"]) + ' y$^{-1}$',
+            horizontalalignment='center',
+            verticalalignment='center',
+            bbox=props,
+        )
+        axlam1.text(
+            time[0] + relax_times[ii],
+            mean + (-1)**ii * 0.01 * yrange,
+            r'$\tau_{'+'{}'.format(st) + '}= %.1f$ y' % (relax_times[ii]),
+            horizontalalignment='right' if ((tmpb and (ii==0)) or (not tmpb and (ii==1))) else 'left',
+            verticalalignment='top' if ii==1 else 'bottom',
+            bbox=props,
+        )
+                                                                         # plot (a) and (b)
+    axlam.text(
+        LAST_YEAR,
+        ylims[-1],
+        "(a)",
+        horizontalalignment='left',
+        verticalalignment='bottom',
+    )
+    axlam1.text(
+        LAST_YEAR,
+        ylims[-1],
+        "(b)",
+        horizontalalignment='left',
+        verticalalignment='bottom',
+    )
+    gs.tight_layout(figlam, pad=0.0)
+
+    return figlam, axlam, axlam1
+
+def f_plot_IDEE(file_name, figure_name, savefig=False):
+    """
+    This function plots the main variables of IDEE.
+
+    ...
+
+    Input
+    -----
+    file_name : string
+        path of the file
+    figure_name : string
+        figure path
+    savefig : boolean
+        True if we save the figure, show if False
+    """
+                                                                         # load data
+    data = np.loadtxt(file_name, skiprows=1)
+                                                                         # load variable names
+    f = open(file_name, "r")
+    lvars = f.readline()
+    f.close()
+    lvars = lvars.split('  ')[:-1]
+    lvars = lvars[0].split(' ') + lvars[1:]
+                                                                         # extend data
+    lvars, data = f_extend_IDEE(lvars, data)
+    time = data[:,0]
+    select = (time >= (time[0]+WINDOW_MEAN[0])) * \
+        (time <= (time[0]+WINDOW_MEAN[1]))
+                                                                         # calculate the number of axes
+    nb_p = len(PLOT_LIST)
+    nbrows = nb_p//NUMCOLS
+    if nb_p%NUMCOLS > 0:
+        nbrows += 1
+                                                                         # make the figure
+    fig, axes = plt.subplots(nbrows, NUMCOLS, sharex=True, figsize=(1.2*A4W, 4))
+    k = 0
+    is_bad = False
+    tricky_vars = ["capital", "omega", "lambda"]
+    indices = []
+    for var in tricky_vars:
+        indices.append(lvars.index(var))
+    is_bad = f_check_bad_attractor(data, indices)
+
+    for i in range(nbrows):
+        for j in range(NUMCOLS):
+            ax = axes[i,j]
+            try:
+                var = PLOT_LIST[k]
+                if not var=="capital":
+                    raw = 100*data[:, lvars.index(var)]
+                else:
+                    raw = data[:, lvars.index(var)]
+
+                mean = np.mean(raw[select])
+                ax.plot(time, raw, time, mean*np.ones(time.size))
+                ax.set_ylabel(var)
+            except IndexError:
+                pass
+            finally:
+                k += 1
+                                                                         # For lambda,
+                                                                         # compute and plot details in
+                                                                         # another figure
+    problem_detected = is_bad
+    if not problem_detected:
+        raw = 100*data[:, lvars.index("lambda")]
+        figlam, axlam, axlam1 = f_plot_main_details_IDEE(time, raw)
+        problem_detected = figlam==0
+    else:
+        print("financial tiping point")
+                                                                         # set the labels of the last row
+    for j in range(NUMCOLS):
+        ax = axes[nbrows-1, j]
+        ax.set_xlabel("time")
+
+    if not problem_detected:
+        for axl in [axlam, axlam1]:
+            axl.set_xlim(time[0], LAST_YEAR)
+            axl.set_xlabel(r"$t$ (y)")
+            axl.legend()
+        axlam.set_ylabel(r"$\lambda$ (%)")
+
+    if savefig:
+        if not problem_detected:
+            print("saving of {}".format(figure_name))
+            plt.savefig(figure_name,
+                bbox_inches="tight", pad_inches=0.1,
+            )
+
+        ax.set_xlim(time[0], LAST_YEAR)
+        print("saving of {}".format(figure_name[:-3]+"_all.png"))
+        plt.savefig(figure_name[:-3]+"_all.png",
+            bbox_inches="tight", pad_inches=0.1,
+        )
+    else:
+                                                                         # show
+        ax.set_xlim(time[0], LAST_YEAR)
+        plt.show()
+
+    plt.close(fig)
+    if not problem_detected:
+        plt.close(figlam)
 
 def f_plot_map(badc, goodc):
     """
@@ -357,6 +1070,7 @@ def f_plot_map(badc, goodc):
     ax.set_xlabel(names[0])
     ax.set_ylabel(names[1])
     plt.show()
+    plt.close(fig)
 
 def f_run_IDEE(sa_class, name_dir):
     """
@@ -551,9 +1265,9 @@ def f_sort_attractors(sa_class):
     })
                                                                          # sort results
     results = sa_class.results
-    data = sa_class.results[:,ind]
     sample = sa_class.samples
 
+    data = sa_class.results[:,ind]
     bad_r, good_r = [], []
     bad_s, good_s = [], []
     for n, res in enumerate(data):
@@ -601,7 +1315,7 @@ def f_test_f_IDEE():
 if __name__=="__main__":
                                                                          # 1 Functions to make data for SA
     path = f_check_dir()
-    sa_class = f_make_sa_class(path, 7)
+    sa_class = f_make_sa_class(path, POW)
     f_save_sa_class(sa_class, path)
     f_run_IDEE(sa_class, path)
     resdata = f_make_outputs(path, plot_freq=False)
