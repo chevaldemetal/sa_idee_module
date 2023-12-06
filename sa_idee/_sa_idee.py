@@ -23,35 +23,52 @@ import os.path as road
 from cycler import cycler
 from matplotlib.colors import CSS4_COLORS as COLORS
 rcParams.update({'font.size': 8, 'lines.linewidth': 1})
+PADS = {
+    "pad":0.,
+    "w_pad":0.,
+    "h_pad":0.
+}
                                                                          #--- macros for users --------------
-POW = 5
+POW = 6
 NAMES = [
     "eta",
     "mu"
 ]
 BOUNDS = [
     [0.16, 0.22],
-    [1.5, 2.1]
+    [1.8, 2.1]
 ]
 OUTPUTS = [
-"mean_lambda",
-"mean_omega",
-"main_frequency_of_cycles"
-]
-PLOT_LIST = [
-    'capital',
-    'g0',
-    'omega',
+    'amplitude',
     'debtratio',
-    'lambda',
-    'wage_growth',
-    'productivity_growth',
-    'smallpi',
-    'kappa',
     'dividends_ratio',
+    'g0',
     'inflation',
+    'kappa',
+    'lambda',
+    'main_frequency',
+    'omega',
+    'productivity_growth',
     'rb',
+    'relaxation_time_inf',
+    'relaxation_time_sup',
+    'smallpi',
+    'wage_growth'
 ]
+PLOT_LIST = {
+    'capital':'K',
+    'g0':'g',
+    'omega':'\omega',
+    'debtratio':'d',
+    'lambda':'\lambda',
+    'wage_growth':'\dot{w}/w',
+    'productivity_growth':'\dot{a}/a',
+    'smallpi':'\pi',
+    'kappa':'\kappa',
+    'dividends_ratio':'\Delta',
+    'inflation':'i',
+    'rb':'r',
+}
 NUMCOLS = 3
 LAST_YEAR = 3000
 TMAX = 3000
@@ -75,7 +92,9 @@ plt.rc('axes',
     prop_cycle=(cycler(color=cc) +
                 cycler(linestyle=ls))
 )
-IDEE = "./gemmes"
+                                                                         # 1 capital 18 omega 19 lambda
+INDICES = [1, 18, 19] 
+COM_IDEE = "./gemmes"
 XMP_FILE = "gemmes.dat.example"
 DAT_FILE = "gemmes.dat.World_default"
 OUT_FILE = "gemmes.out.World_default"
@@ -84,51 +103,37 @@ DIR_LOC = os.getcwd()
 DIR_SAVE = road.join(DIR_LOC, "outputs_")
 DT = 1./12
 INFTY_SMALL = 1.E-12
-EPSILON = 1.E-2
-
+POURCENT = 0.01
 WINDOW_FREQ = 100
-WINDOW_RELAX = 100
-WINDOW_AMP = [400, 500]
-WINDOW_MEAN = [400, 500]
+WINDOW_AMP = [-400, 0]
+WINDOW_MEAN = [-100, 0]
 A4W = 8.27
                                                                          #--- functions ---------------------
-def f_check_bad_attractor(data, indices):
+def check_bad_attractor(data):
     """
     This function checks whether the simulation converges toward the bad attractor.
 
-    ...
-
     Input
-    -----
-    data : numpy.ndarray (float)
-        the array containing the simulation's data
-    indices : list (float)
-        the array of tricky variables' indices like lambda, capital etc.
-
-    ...
-
+        data : numpy.ndarray (float)
+            the array containing the simulation's data
     Output
-    ------
-    is_bad : boolean
-        True wheter it converges toard the bad attractor
+        is_bad : boolean
+            True wheter it converges toard the bad attractor
     """
     is_bad = False
-    for ind in indices:
+    for ind in INDICES:
         raw = data[:, ind]
-        is_bad = is_bad or (raw<INFTY_SMALL).any() or np.isnan(raw).any()
+        is_bad = is_bad or (raw<POURCENT).any() or np.isnan(raw).any()
 
     return is_bad
 
-def f_check_dir():
+def check_dir():
     """
     Check wether the outputs directory exists.
 
-    ...
-
     Output
-    ------
-    name_dir : string
-        the name of the directory that constains the outputs
+        name_dir : string
+            the name of the directory that constains the outputs
     """
     it_exists = True
     num = 0
@@ -141,25 +146,18 @@ def f_check_dir():
 
     return name_dir
 
-def f_comp_growth(data, nb):
+def comp_growth(data, nb):
     """
     Computes the growth rate of the array data.
 
-    ...
-
     Input
-    -----
-    data : numpy.ndarray
-        the raw data
-    nb : integer
-        the window length
-
-    ...
-
+        data : numpy.ndarray
+            the raw data
+        nb : integer
+            the window length
     Output
-    ------
-    growth : numpy.ndarray
-        the growth rate (same size filled with zeros)
+        growth : numpy.ndarray
+            the growth rate (same size filled with zeros)
     """
     g = (np.roll(data, -1) - data)/DT/data
     growth = np.convolve(g[::-1], np.ones(nb), "valid") / nb
@@ -168,27 +166,20 @@ def f_comp_growth(data, nb):
 
     return growth
 
-def f_comp_main_freq(signal):
+def comp_main_freq(signal):
     """
     Computes the main frequency of the signal.
 
-    ...
-
     Input
-    -----
-    signal : numpy.ndarray
-        the signal
-
-    ...
-
+        signal : numpy.ndarray
+            the signal
     Output
-    ------
-    main_freq : float
-        the main frequency
-    sp : numpy.ndarray
-        sample of powers
-    freq : numpy.ndarray
-        frequencies
+        main_freq : float
+            the main frequency
+        sp : numpy.ndarray
+            sample of powers
+        freq : numpy.ndarray
+            frequencies
     """
     sp = np.fft.rfft(signal)
     nf = np.argmax(np.absolute(sp)[1:])
@@ -197,62 +188,74 @@ def f_comp_main_freq(signal):
 
     return main_freq, sp, freq
 
-def f_comp_observations(time, raw):
+def comp_mean(raw, selectamp):
+    """
+    This function can be used to compute the mean of the signal.
+
+    Input
+        raw : numpy.ndarray (float) 
+            the data
+        selectamp : numpy.ndarray (boolean)
+            the selected window
+    Output
+        mean : float
+            the mean
+        damp : float
+            the signal amplitude
+    """
+                                                                         # compute the main amplitude
+    damp = 0.5*(np.nanmax(raw[selectamp]) - np.nanmin(raw[selectamp]))
+                                                                         # compute the mean
+    mean = np.nanmin(raw[selectamp]) + damp
+
+    return mean, damp
+
+def comp_observations(time, raw):
     """
     Compute the observations on the lambda variable.
 
-    ...
-
     Input
-    -----
-    time : numpy.ndarray (float)
-        time
-    raw : numpy.ndarray (float)
-        the raw signal (most of the time 'lambda')
-
-    ...
-
+        time : numpy.ndarray (float)
+            time
+        raw : numpy.ndarray (float)
+            the raw signal (most of the time 'lambda')
     Output
-    ------
-    outs : dict (*)
-        mean : (float)
-            mean at the end
-        main_freq : (float)
-            main frequency
-        relax_time : (float)
-            relaxation time
-        damp : (float)
-            amplitude
-    buffs : dict (*)
-        delay : (float)
-            delay between time[0] and time[argmax(raw)]
-        xi : numpy.ndarray (float)
-            lower envelope
-        xs : numpy.ndarray (float)
-            upper envelope
-        ress : list (numpy.ndarray (float))
-            linear regressions of envelopes
-        relax_times : list (float)
-            relaxation times of envelopes
-        label : string
-            label of the chosen envelope
-        converge : boolean
-            true whether the signal converges toward the mean value
-        initial_times : list (float)
-            the times from which it converges
+        outs : dict (*)
+            mean : (float)
+                mean at the end
+            main_freq : (float)
+                main frequency
+            relax_time : (float)
+                relaxation time
+            damp : (float)
+                amplitude
+        buffs : dict (*)
+            delay : (float)
+                delay between time[0] and time[argmax(raw)]
+            xi : numpy.ndarray (float)
+                lower envelope
+            xs : numpy.ndarray (float)
+                upper envelope
+            ress : list (numpy.ndarray (float))
+                linear regressions of envelopes
+            relax_times : list (float)
+                relaxation times of envelopes
+            label : string
+                label of the chosen envelope
+            status : string
+                indicates converge, diverge, trans_inf, trans_sup
+            initial_times : list (float)
+                the times from which it converges
     """
     try:
                                                                          # selects
-        selectm = (time >= (time[0]+WINDOW_MEAN[0])) * \
-            (time <= (time[0]+WINDOW_MEAN[1]))
         selectf = time <= (time[0] + WINDOW_FREQ)
-        selectamp = (time >= (time[0]+WINDOW_AMP[0])) * \
-            (time <= (time[0]+WINDOW_AMP[1]))
-                                                                         # compute the mean
-        mean = np.mean(raw[selectm])
-        ismean = (np.abs(raw - mean)<0.01)
+        selectamp = (time >= (time[-1]+WINDOW_AMP[0])) * \
+            (time <= (time[-1]+WINDOW_AMP[1]))
+                                                                         # compute the amplitude and mean
+        mean, damp = comp_mean(raw, selectamp)
                                                                          # compute the main frequency
-        main_freq, sp, f = f_comp_main_freq(raw[selectf])
+        main_freq, sp, f = comp_main_freq(raw[selectf])
         Tmax = time[selectf]
         Tmax = Tmax[np.argmax(raw[selectf])]
         delay = Tmax - time[0]
@@ -265,36 +268,28 @@ def f_comp_observations(time, raw):
         gradient[np.nanargmin(raw)] = 0.
 
                                                                          # check whether its converges or not
-        anal_sup = hilbert(raw-mean)
+        anal_sup = hilbert(raw - mean)
         big_env_sup = np.abs(anal_sup)
         tmp_sel = time <= (time[0]+100)
-        #amp_ini = mean_sup_ini
         nanmax_ini, nanmin_ini = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
         amp_ini = nanmax_ini - nanmin_ini
 
         tmp_sel = ((time[0]+300) <= time) * (time <= (time[0]+400))
         mean_sup_infty = np.nanmean(big_env_sup[tmp_sel])
-        #amp_infty = mean_sup_infty
         nanmax_infty, nanmin_infty = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
         amp_infty = nanmax_infty - nanmin_infty
 
-        converge = amp_ini/amp_infty > 1.05
-
-        if False:
-            print(converge)
-
-            fig, ax = plt.subplots()
-            ax.plot(time, raw-mean)
-            ax.plot(time, big_env_sup)
-            #ax.plot(time, big_env_inf)
-
-            ax.plot([time[0], time[0]+100], [nanmax_ini]*2)
-            ax.plot([time[0], time[0]+100], [nanmin_ini]*2)
-            ax.plot([time[0]+300, time[0]+400], [nanmax_infty]*2)
-            ax.plot([time[0]+300, time[0]+400], [nanmin_infty]*2)
-
-            plt.show()
-            sys.exit()
+        if (amp_ini >= amp_infty) and (nanmax_ini >= nanmax_infty) and (nanmin_ini <= nanmin_infty):
+            status = "converge"
+        elif (amp_ini <= amp_infty) and (nanmax_ini <= nanmax_infty) and (nanmin_ini >= nanmin_infty):
+            status = "diverge"
+        elif (nanmax_ini >= nanmax_infty) and (nanmin_ini >= nanmin_infty):
+            status = "trans_inf"
+        elif (nanmax_ini <= nanmax_infty) and (nanmin_ini <= nanmin_infty):
+            status = "trans_sup"
+        else:
+            plt.close('all')
+            raise ValueError("No status has been found.")
 
         selpos = ((raw - mean) >= 0.)
         selneg = ((raw - mean) <= 0.)
@@ -304,27 +299,31 @@ def f_comp_observations(time, raw):
 
         tinf = time[sel_inf]
         rawinf = raw[sel_inf]
-        if converge:
+
+        if status=="converge" or status=="trans_sup":
             sel_inf_2 = np.logical_or(
                 ((np.roll(rawinf, -1) - rawinf)>=0.),
                 np.abs(rawinf-mean)<0.1
             )
             sel_inf_2[0] = rawinf[0] <= rawinf[1]
-        else:
+        elif status=="diverge" or status=="trans_inf":
             sel_inf_2 = [True]*tinf.size
+
         rawinf = rawinf[sel_inf_2]
         tinf = tinf[sel_inf_2]
 
         tsup = time[sel_sup]
         rawsup = raw[sel_sup]
-        if converge:
+
+        if status=="converge" or status=="trans_inf":
             sel_sup_2 = np.logical_or(
                 ((np.roll(rawsup, -1) - rawsup)<=0.),
                 np.abs(rawsup-mean)<0.1
             )
             sel_sup_2[0] = rawinf[0] >= rawinf[1]
-        else:
+        elif status=="diverge" or status=="trans_sup":
             sel_sup_2 = [True]*tsup.size
+
         rawsup = rawsup[sel_sup_2]
         tsup = tsup[sel_sup_2]
 
@@ -345,18 +344,20 @@ def f_comp_observations(time, raw):
             tmpraw = raws[ii]
 
             nanmax, nanmin = np.nanmax(amp_env), np.nanmin(amp_env)
+                                                                         # here we define the sign of the
+                                                                         # desired slope
             if ii==0:
-                if converge:
+                if status=="converge" or status=="trans_sup":
                     y = nanmax
                     scale = 1.
-                else:
+                elif status=="diverge" or status=="trans_inf":
                     y = nanmin
                     scale = -1.
             else:
-                if converge:
+                if status=="converge" or status=="trans_inf":
                     y = nanmin
                     scale = -1.
-                else:
+                elif status=="diverge" or status=="trans_sup":
                     y = nanmax
                     scale = 1.
 
@@ -381,8 +382,6 @@ def f_comp_observations(time, raw):
 
         label = labels[np.argmin(relax_times)]
         relax_time = np.min(relax_times)
-                                                                         # compute the main amplitude
-        damp = 0.5*(np.mean(xs[selectamp]) - np.mean(xi[selectamp]))
 
         outs = {
             "mean":mean,
@@ -397,44 +396,37 @@ def f_comp_observations(time, raw):
             "ress":ress,
             "relax_times":relax_times,
             "label":label,
-            "converge":converge,
+            "status":status,
             "initial_times":initial_times
         }
 
     except Exception:
-        print("Problem in 'f_comp_observations'")
+        print("Problem in 'comp_observations'")
         if RAISE:
             print(outs)
             print(buffs)
-
             raise
 
     return outs, buffs
 
-def f_empty(a=0,b=0,c=0,d=0,e=0,f=0):
-    pass
+def empty_print(a):
+    print(a)
+    return 1
 
-def f_extend_IDEE(lvars, data):
+def extend_IDEE(lvars, data):
     """
     This function adds new fields compputed from the raw data.
 
-    ...
-
     Input
-    -----
-    lvars : list (string)
-        the list of variables names
-    data : numpy.ndarray (float)
-        the raw data
-
-    ...
-
+        lvars : list (string)
+            the list of variables names
+        data : numpy.ndarray (float)
+            the raw data
     Output
-    ------
-    lvars : list (float)
-        the extended list of variables
-    data : numpy.ndarray (float)
-        the extended data
+        lvars : list (float)
+            the extended list of variables
+        data : numpy.ndarray (float)
+            the extended data
     """
     nb = int(1./DT)
     nbrows = data.shape[0]
@@ -451,34 +443,31 @@ def f_extend_IDEE(lvars, data):
                                                                          # append wage growth rate
     lvars.append("wage_growth")
     new = np.zeros((nbrows,1))
-    new[:,0] = f_comp_growth(data[:,4], nb)
+    new[:,0] = comp_growth(data[:,4], nb)
     data = np.hstack((data, new))
                                                                          # append productivity growth
     lvars.append("productivity_growth")
     new = np.zeros((nbrows,1))
-    new[:,0] = f_comp_growth(data[:,5], nb)
+    new[:,0] = comp_growth(data[:,5], nb)
     data = np.hstack((data, new))
                                                                          # append population growth
     lvars.append("population_growth")
     new = np.zeros((nbrows,1))
-    new[:,0] = f_comp_growth(data[:,2], nb)
+    new[:,0] = comp_growth(data[:,2], nb)
     data = np.hstack((data, new))
     return lvars, data
 
-def f_IDEE(params, n, name_dir):
+def IDEE(params, n, name_dir):
     """
     This function defines a set of params, sets a single problem to simulate and runs it.
 
-    ...
-
-    Argument
-    --------
-    params : dict (float)
-        the set of parameters to change
-    n : integer
-        the number associated to this specific set of params
-    name_dir : string
-        the outputs' directory
+    Input
+        params : dict (float)
+            the set of parameters to change
+        n : integer
+            the number associated to this specific set of params
+        name_dir : string
+            the outputs' directory
     """
     os.chdir(DIR_IDEE)
                                                                          # change the file of parameters
@@ -491,140 +480,149 @@ def f_IDEE(params, n, name_dir):
     f.write('\n/\n')
     f.close()
                                                                          # IDEE is ran here
-    subprocess.run(IDEE)
+    subprocess.run(COM_IDEE)
                                                                          # save the outputs
     shutil.copyfile(OUT_FILE, road.join(name_dir, OUT_FILE + '_set{:d}'.format(n)))
 
     os.chdir(DIR_LOC)
 
-def f_is_close(c1, c2):
+def is_close(c1, c2):
     """
     Returns True whether the classes sa_c1 and sa_c2 are similar.
 
-    ...
-
     Input
-    -----
-    c1 : SALib.util.problem.ProblemSpec
-        first class of the library SAlib
-    c2 : SALib.util.problem.ProblemSpec
-        second class of the library SAlib
-
-    ...
-
+        c1 : SALib.util.problem.ProblemSpec
+            first class of the library SAlib
+        c2 : SALib.util.problem.ProblemSpec
+            second class of the library SAlib
     Output
-    ------
-    is_close : boolean
-        True whether the two classes are equal (with a controled error)
+        is_close : boolean
+            True whether the two classes are equal (with a controled error)
     """
-    error = lambda b, k: print(" {} are different".format(k)) if (not b) else 0
+    error = lambda b, k: empty_print(" {} are different".format(k)) if (not b) else 0
                                                                          # list of cheks
                                                                          # num_vars
     k = "num_vars"
-    error(c1[k]==c2[k], k)
+    is_close = error(c1[k]==c2[k], k)
                                                                          # names and outputs
     for k in ["names", "outputs"]:
         n1 = c1[k]
         n2 = c2[k]
         for n, name in enumerate(n1):
-            error(name==n2[n], k)
+            is_close += error(name==n2[n], k)
                                                                          # bounds
     k = "bounds"
-    error(np.allclose(c1[k], c2[k]), k)
+    is_close += error(np.allclose(c1[k], c2[k]), k)
                                                                          # results
     try:
         s1 = c1.results.size
         s2 = c2.results.size
         k = "results array"
-        error(s1==s2, k)
-        error(np.allclose(c1.results, c2.results), k)
+        is_close += error(s1==s2, k)
+        is_close += error(np.allclose(c1.results, c2.results), k)
 
     except AttributeError:
-        print("At least one class does not have any results array")
+        print("At least one class does not have any results array.")
 
-    return True
+    try:
+        ba1 = c1["bad_array"]
+        ba2 = c2["bad_array"]
+        k = "results array"
+        is_close += error(ba1.size==ba2.size, k)
+        is_close += error(np.allclose(ba1, ba2), k)
 
-def f_make_outputs(path, plot_freq=False):
+    except KeyError:
+        print("At least one class does not have any bad_array.")
+
+    return is_close==0
+
+def make_outputs(path):
     """
     This function loads a sample of simulations and make the result array.
 
-    ...
-
     Input
-    -----
-    path : string
-        location of the simulations
-    plot_freq : boolean
-        if True, plot the approximated signal with the main frequency then quit
-
-    ...
-
+        path : string
+            location of the simulations
     Output
-    ------
-    result : numpy.ndarray (float)
-        the array of resulted post-treatment data
+        result : numpy.ndarray (float)
+            the array of resulted post-treatment data
+        bad_array : numpy.ndarray (boolean)
+            True if it is a simulation toward the bad attractor
+        keys : list (string)
+            outputs names
     """
-    func = f_plot_main_freq if plot_freq else f_empty
-
     samples = np.loadtxt(road.join(path, "sample.dat"))
     nums = samples.shape[0]
+    bad_array = np.zeros(nums, dtype=np.bool8)
+    nb_len = len(OUTPUTS)
+    output_list = OUTPUTS.copy()
+    output_list.remove('amplitude')
+    output_list.remove('main_frequency')
+    output_list.remove('relaxation_time_inf')
+    output_list.remove('relaxation_time_sup')
 
-    mean_l = []
-    mean_o = []
-    cycle_freq = []
     print("  {:d} simulations to do".format(nums))
+    results = np.zeros((nums, nb_len))
     for n in range(nums):
         if n%10==0:
             print('   {:d}'.format(n))
-
-        data = np.loadtxt(road.join(path,
-            OUT_FILE+'_set{:d}'.format(n)),
-            skiprows=1
-        )
+                                                                         # load here
+        file_name = road.join(path, OUT_FILE+'_set{:d}'.format(n))
+        data = np.loadtxt(file_name, skiprows=1)
+                                                                         # check whether it is bad attracted
+        bad_array[n] = check_bad_attractor(data)
         sample = [n] + samples[n,:].tolist()
-
+                                                                         # load variable names
+        f = open(file_name, "r")
+        lvars = f.readline()
+        f.close()
+        lvars = lvars.split('  ')[:-1]
+        lvars = lvars[0].split(' ') + lvars[1:]
+                                                                         # extend data
+        lvars, data = extend_IDEE(lvars, data)
         time = data[:,0]
-        omega = data[:,18]
-        lambd = data[:,19]
-                                                                         # get means
-        select = (time >= (time[0]+WINDOW_MEAN[0])) * \
-            (time <= (time[0]+WINDOW_MEAN[1]))
-        m_l = np.mean(lambd[select])
-        m_o = np.mean(omega[select])
-                                                                         # get the main frequency
-        select = time <= (time[0] + WINDOW_FREQ)
-        main_freq, sp, freq = f_comp_main_freq(omega[select])
-                                                                         # plot of required
-        func(main_freq, sp, freq, omega, time, sample)
+        selectamp = (time >= (time[-1]+WINDOW_AMP[0])) * (time <= (time[-1]+WINDOW_AMP[1]))
 
-        mean_l.append(m_l)
-        mean_o.append(m_o)
-        cycle_freq.append(main_freq)
-                                                                         # turn lists in arrays
-    mean_l = np.asarray(mean_l)
-    mean_o = np.asarray(mean_o)
-    cycle_freq = np.asarray(cycle_freq)
-    results = np.column_stack((mean_l, mean_o, cycle_freq))
+        outputs = {}
+        if not bad_array[n]:
+            for var in output_list:
+                raw = 100.*data[:, lvars.index(var)]
+                if var=="lambda":
+                    outs, buffs = comp_observations(time, raw)
+                mean, damp = comp_mean(raw, selectamp)
+                outputs[var] = mean
 
-    return results
+            outputs["main_frequency"] = outs["main_freq"]
+            outputs["relaxation_time_inf"] = buffs["relax_times"][0]
+            outputs["relaxation_time_sup"] = buffs["relax_times"][1]
+            outputs["amplitude"] = outs["damp"]
+        else:
+            for var in OUTPUTS:
+                outputs[var] = 0.
 
-def f_make_sa_class(name_dir, Pow=2):
+            outputs["main_frequency"] = 0.
+            outputs["relaxation_time_inf"] = 0.
+            outputs["relaxation_time_sup"] = 0.
+            outputs["amplitude"] = 0.
+
+        keys = sorted(list(outputs.keys()))
+        line = []
+        for key in keys:
+            line.append(outputs[key])
+        results[n, :] = line
+
+    return results, bad_array, keys
+
+def make_sa_class(name_dir, Pow=2):
     """
     This function makes a class of the library SAlib with the required parameters.
 
-    ...
-
     Input
-    -----
-    Pow : integer
-        the power used to determine the sample size
-
-    ...
-
+        Pow : integer
+            the power used to determine the sample size
     Ouput
-    -----
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
     """
     sa_class = ProblemSpec({
         "num_vars":2,
@@ -640,23 +638,16 @@ def f_make_sa_class(name_dir, Pow=2):
 
     return sa_class
 
-def f_load_sa_class(path):
+def load_sa_class(path):
     """
     This functions loads the data and make a sa_class.
 
-    ...
-
     Input
-    -----
-    path : string
-        the path where to load the data
-
-    ...
-
+        path : string
+            the path where to load the data
     Output
-    ------
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
     """
     filename = road.join(path, "sample.dat")
     sample = np.loadtxt(filename)
@@ -683,84 +674,34 @@ def f_load_sa_class(path):
         f.close()
         sa_class["outputs"] = out_names
         sa_class.set_results(results)
+    else:
+        rep = input("Enter list of outputs separated with a w-space (ex: lambda omega freq)\n")
+        sa_class["outputs"] = rep.split(' ')
+
+    filename = road.join(path, "bad_array.dat")
+    if road.exists(filename):
+        bad_array = np.loadtxt(filename).astype(np.bool8)
+        sa_class["bad_array"] = bad_array.copy()
 
     return sa_class
 
-def f_plot_main_freq(main_freq, sp, freq, signal, time, sample):
-    """
-    Plot the approximated signal thanks to the main frequency.
-
-    ...
-
-    Arguments
-    ---------
-    main_freq : float
-        the main frequency computed by the Fourier transform
-    sp : numpy.ndarray (float)
-        Fourier coefficients
-    freq : numpy.ndarray (float)
-        Frequencies
-    signal : numpy.ndarray (float)
-        the original signal
-    time : numpy.ndarray (float)
-        the time
-    sample : numpy.ndarray
-        the array of parameters, first element is the sample number
-    """
-
-    fig, axes = plt.subplots(nrows=2, ncols=1)
-
-    axes[0].plot(freq, np.absolute(sp)[1:])
-    axes[0].set_xlabel("frequency (Hz)")
-    axes[0].set_ylabel("absolute Fourier coefficient value")
-
-    mean_s = np.mean(signal)
-    analytic_signal = hilbert(signal - mean_s)
-    amplitude_envelope = mean_s + np.abs(analytic_signal)
-
-    amp = 0.5*np.max(np.abs(signal) - mean_s)
-    approx_s = mean_s + amp*np.sin(2.*np.pi*main_freq*time)
-    Tmax = time[np.argmax(signal/amplitude_envelope/time)]
-    delay = Tmax - time[0]
-
-    axes[1].plot(time, signal, label='original signal')
-    #axes[1].plot(time, amplitude_envelope, label='signal envelope')
-    axes[1].plot(time+delay, approx_s, label='$C^0 \sin(2\pi f_m t)$')
-    axes[1].set_xlabel("time")
-    axes[1].set_ylabel("main frequency signal")
-    axes[1].legend()
-
-    print(sample[0], sample[1:])
-    plt.show()
-    plt.close(fig)
-    rep = input("  Press Enter to continue, Q to quit: ")
-    if rep=="Q":
-        sys.exit("  Execution stopped by User")
-
-def f_plot_main_details_IDEE(time, raw):
+def plot_main_details_IDEE(time, raw):
     """
     Return a figure that shows the main detail of the computed quantities
     for the SA of IDEE.
 
-    ...
-
     Input
-    -----
-    time : numpy.ndarray (float)
-        time
-    raw : numpy.ndarray (float)
-        the raw signal (most of the time 'lambda')
-
-    ...
-
+        time : numpy.ndarray (float)
+            time
+        raw : numpy.ndarray (float)
+            the raw signal (most of the time 'lambda')
     Output
-    ------
-    figlam : matplotlib.pyplot.figure
-        figure with all details
-    axlam : matplotlib.axes.Axes
-        left figure with details
-    axlam1 : matplotlib.axes.Axes
-        right figure with linear regressions of envelopes
+        figlam : matplotlib.pyplot.figure
+            figure with all details
+        axlam : matplotlib.axes.Axes
+            left figure with details
+        axlam1 : matplotlib.axes.Axes
+            right figure with linear regressions of envelopes
     """
     figlam = plt.figure(figsize=(A4W, 3.5))
     gs = GridSpec(
@@ -772,7 +713,7 @@ def f_plot_main_details_IDEE(time, raw):
     axlam = figlam.add_subplot(gs[:, :-1])
     axlam1 = figlam.add_subplot(gs[0,-1])
                                                                          # compute other observation quantities
-    outs, buffs = f_comp_observations(time, raw)
+    outs, buffs = comp_observations(time, raw)
 
     mean = outs["mean"]
     main_freq = outs["main_freq"]
@@ -784,12 +725,12 @@ def f_plot_main_details_IDEE(time, raw):
     ress = buffs["ress"]
     relax_times = buffs["relax_times"]
     label = buffs["label"]
-    converge = buffs["converge"]
+    status = buffs["status"]
     initial_times = buffs["initial_times"]
 
     t0 = initial_times[0] if label=="inf" else initial_times[1]
     labels = ["inf", "sup"]
-    selectr = time <= (time[0] + WINDOW_RELAX)
+    selectr = time <= (time[0] + WINDOW_FREQ)
                                                                          #
                                                                          # plots
     st = time<=LAST_YEAR
@@ -820,21 +761,27 @@ def f_plot_main_details_IDEE(time, raw):
     )
                                                                          # plots in axlam1
                                                                          # inf
-    tmp = ress[0]["intercept"] + ress[0]["slope"]*time[st]
+    tmp = ress[0]["intercept"] + ress[0]["slope"]*timest
     nanminxi = np.nanmin(xi)
     nanmaxxi = np.nanmax(xi)
-    if converge:
+    if status=="converge" or status=="trans_sup":
         tmpsel = tmp <= nanmaxxi
         toplot = nanmaxxi
-    else:
+    elif status=="diverge" or status=="trans_inf":
         tmpsel = tmp >= nanminxi
         toplot = nanminxi
+    tmpsel = tmpsel * (timest >= initial_times[0])
     lineres, = axlam1.plot(timest[tmpsel], tmp[tmpsel],
         color="C2"
     )
     axlam1.plot(timest, toplot*np.ones(sst),
         color=lineres.get_color(),
         linestyle=lineres.get_linestyle(),
+    )
+    axlam1.plot(timest[tmpsel], toplot*np.ones(np.count_nonzero(tmpsel)),
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
+        linewidth=2,
     )
     axlam1.plot(timest, xi[st],
             color=line.get_color(),
@@ -851,12 +798,13 @@ def f_plot_main_details_IDEE(time, raw):
     tmp = ress[1]["intercept"] + ress[1]["slope"]*timest
     nanminxs = np.nanmin(xs)
     nanmaxxs = np.nanmax(xs)
-    if converge:
+    if status=="converge" or status=="trans_inf":
         tmpsel = tmp >= nanminxs
         toplot = nanminxs
-    else:
+    elif status=="diverge" or status=="trans_sup":
         tmpsel = tmp <= nanmaxxs
         toplot = nanmaxxs
+    tmpsel = tmpsel * (timest >= initial_times[1])
     axlam1.plot(timest[tmpsel], tmp[tmpsel],
         color=lineres.get_color(),
         linestyle=lineres.get_linestyle(),
@@ -864,6 +812,11 @@ def f_plot_main_details_IDEE(time, raw):
     axlam1.plot(timest, toplot*np.ones(sst),
         color=lineres.get_color(),
         linestyle=lineres.get_linestyle(),
+    )
+    axlam1.plot(timest[tmpsel], toplot*np.ones(np.count_nonzero(tmpsel)),
+        color=lineres.get_color(),
+        linestyle=lineres.get_linestyle(),
+        linewidth=2,
     )
     axlam1.plot(timest, xs[st],
             color=line.get_color(),
@@ -877,11 +830,11 @@ def f_plot_main_details_IDEE(time, raw):
     )
                                                                          # plot amplitude
     line, = axlam.plot(
-        [time[0]+WINDOW_AMP[0], time[0]+WINDOW_AMP[1]],
+        [time[-1]+WINDOW_AMP[0], time[-1]+WINDOW_AMP[1]],
         [mean+damp, mean+damp],
     )
     axlam.plot(
-        [time[0]+WINDOW_AMP[0], time[0]+WINDOW_AMP[1]],
+        [time[-1]+WINDOW_AMP[0], time[-1]+WINDOW_AMP[1]],
         [mean-damp, mean-damp],
         color=line.get_color(),
         linestyle=line.get_linestyle()
@@ -929,19 +882,19 @@ def f_plot_main_details_IDEE(time, raw):
     )
                                                                          # plot text amplitude
     axlam.plot(
-        [time[0]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1])]*2,
+        [time[-1]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1])]*2,
         [mean+damp, mean],
         color=line.get_color(),
         linestyle=line.get_linestyle()
     )
     axlam.plot(
-        [time[0]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1])]*2,
+        [time[-1]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1])]*2,
         [mean, mean-damp],
         color=line.get_color(),
         linestyle=line.get_linestyle()
     )
     axlam.text(
-        time[0]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1]),
+        time[-1]+0.5*(WINDOW_AMP[0]+WINDOW_AMP[1]),
         mean,
         r'$A = %.1f$' % (2*damp) + "%",
         horizontalalignment='center',
@@ -1001,24 +954,21 @@ def f_plot_main_details_IDEE(time, raw):
 
     return figlam, axlam, axlam1
 
-def f_plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
+def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
     """
     This function plots the main variables of IDEE.
 
-    ...
-
     Input
-    -----
-    path : string
-        the path of the data
-    file_name : string
-        name of file
-    figure_name : string
-        name of figure 'lambda'
-    figure_name_all : string
-        name of figure 'all'
-    savefig : boolean
-        True if we save the figure, show if False
+        path : string
+            the path of the data
+        file_name : string
+            name of file
+        figure_name : string
+            name of figure 'lambda'
+        figure_name_all : string
+            name of figure 'all'
+        savefig : boolean
+            True if we save the figure, show if False
     """
     badpath = road.join(path, "png_bad")
     goodpath = road.join(path, "png_good")
@@ -1035,38 +985,55 @@ def f_plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
     lvars = lvars.split('  ')[:-1]
     lvars = lvars[0].split(' ') + lvars[1:]
                                                                          # extend data
-    lvars, data = f_extend_IDEE(lvars, data)
+    lvars, data = extend_IDEE(lvars, data)
     time = data[:,0]
-    select = (time >= (time[0]+WINDOW_MEAN[0])) * \
-        (time <= (time[0]+WINDOW_MEAN[1]))
+    select = (time >= (time[-1]+WINDOW_AMP[0])) * \
+        (time <= (time[-1]+WINDOW_AMP[1]))
+    select_ylim = time <= YLIM_YEAR
                                                                          # calculate the number of axes
-    nb_p = len(PLOT_LIST)
+    plot_list_keys = list(PLOT_LIST.keys())
+    nb_p = len(plot_list_keys)
     nbrows = nb_p//NUMCOLS
     if nb_p%NUMCOLS > 0:
         nbrows += 1
                                                                          # make the figure
-    fig, axes = plt.subplots(nbrows, NUMCOLS, sharex=True, figsize=(1.2*A4W, 4))
+    fig, axes = plt.subplots(nbrows, NUMCOLS, sharex=True, figsize=(A4W, 4.))
     k = 0
     is_bad = False
-    tricky_vars = ["capital", "omega", "lambda"]
-    indices = []
-    for var in tricky_vars:
-        indices.append(lvars.index(var))
-    is_bad = f_check_bad_attractor(data, indices)
+                                                                         # check whether it is a bad attractor
+    is_bad = check_bad_attractor(data)
+    if is_bad:
+        ylim_year = -1
+        #ylim_year = 100*data[:, lvars.index("inflation")]
+        #ylim_year = np.arange(time.size)[ylim_year<-15]
+        #ylim_year = ylim_year[0]
+    else:
+        ylim_year = -1
 
     for i in range(nbrows):
         for j in range(NUMCOLS):
             ax = axes[i,j]
             try:
-                var = PLOT_LIST[k]
-                if not var=="capital":
-                    raw = 100*data[:, lvars.index(var)]
-                else:
+                var = plot_list_keys[k]
+                if var=="debtratio":
+                    raw = 1./data[:, lvars.index(var)]
+                    mean, damp = comp_mean(raw, select)
+                    ax.set_ylabel(r"$1/d$")
+                    set_ylims(select_ylim, raw, ax)
+                elif var=="capital":
                     raw = data[:, lvars.index(var)]
+                    mean = np.nan
+                    ax.set_ylabel(r"$K$")
+                else:
+                    raw = 100*data[:, lvars.index(var)]
+                    mean, damp = comp_mean(raw, select)
+                    ax.set_ylabel(r"${}$".format(PLOT_LIST[var])) # var.replace("_", "\n"))
+                    #set_ylims(select_ylim, raw, ax)
 
-                mean = np.mean(raw[select])
+                mean = mean if not is_bad else np.nan
+                raw[ylim_year:] = raw[ylim_year]
                 ax.plot(time, raw, time, mean*np.ones(time.size))
-                ax.set_ylabel(var)
+
             except IndexError:
                 pass
             finally:
@@ -1077,7 +1044,7 @@ def f_plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
     problem_detected = is_bad
     if not problem_detected:
         raw = 100*data[:, lvars.index("lambda")]
-        figlam, axlam, axlam1 = f_plot_main_details_IDEE(time, raw)
+        figlam, axlam, axlam1 = plot_main_details_IDEE(time, raw)
         problem_detected = figlam==0
     else:
         print("financial tiping point")
@@ -1109,6 +1076,7 @@ def f_plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
             name = road.join(badpath, figure_name_all)
 
         print("saving of {}".format(figure_name_all))
+        plt.tight_layout(**PADS)
         plt.savefig(name,
             bbox_inches="tight", pad_inches=0.1,
         )
@@ -1119,20 +1087,24 @@ def f_plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
         plt.show()
         plt.close('all')
 
-def f_plot_map(badc, goodc):
+def plot_map(badc, goodc):
     """
     This function is used to map the range of parameters.
     The criterion is good or bad attractors.
 
-    ...
-
     Input
-    -----
-    badc : SALib.util.problem.ProblemSpec
-        the class with all the bad attractor
-    goodc : SALib.util.problem.ProblemSpec
-        the class with all the good attractor
+        badc : SALib.util.problem.ProblemSpec
+            the class with all the bad attractor
+        goodc : SALib.util.problem.ProblemSpec
+            the class with all the good attractor
+    Output
+        isplot : boolean
+            True if there is a plot, False else
     """
+    if badc==None:
+        print("There is no map to plot since there is no bad point.")
+        return False
+
     names = badc["names"]
     bad_sample = badc.samples
     good_sample = goodc.samples
@@ -1142,61 +1114,67 @@ def f_plot_map(badc, goodc):
     good_sample = good_sample[~select_rows,:]
                                                                          # plot figure
     fig, ax = plt.subplots()
-    coords = np.vstack((bad_sample, good_sample, nan_sample))
-    colors = ['b']*bad_sample.shape[0] + ['g']*good_sample.shape[0] + ['r'] * nan_sample.shape[0]
-    s = np.ones(coords.shape[0])
-    ax.scatter(coords[:,0], coords[:,1], c=colors)
+
+    ax.scatter(
+        bad_sample[:, 0],
+        bad_sample[:, 1],
+        c='r',
+        marker='X',
+        label='financial tipping points'
+    )
+    ax.scatter(
+        good_sample[:, 0],
+        good_sample[:, 1],
+        c='g',
+        label='growth'
+    )
+    ax.scatter(nan_sample[:, 0], nan_sample[:, 1], c='b')
+
     ax.set_xlabel(names[0])
     ax.set_ylabel(names[1])
+    ax.legend(framealpha=1.)
     plt.show()
     plt.close(fig)
 
-def f_run_IDEE(sa_class, name_dir):
+    return True
+
+def run_IDEE(sa_class, name_dir):
     """
     This function makes a sensivity analysis of the model IDEE.
 
-    ...
-
     Input
-    -----
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
-    name_dir : string
-        the  directory where to save IDEE's outputs
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
+        name_dir : string
+            the  directory where to save IDEE's outputs
     """
                                                                          # define a global timer
     time_start = timer()
+    nbmax = sa_class.samples.shape[0]
                                                                          # run the model
     names = sa_class["names"]
     loop_times = []
     for n, sample in enumerate(sa_class.samples):
         loop_time_start = timer()
-
+        print("\n--- {:d} / {:d} ---".format(n+1, nbmax))
         params = dict(zip(names, sample))
-        f_IDEE(params, n, name_dir)
+        IDEE(params, n, name_dir)
         loop_times.append(timer() - loop_time_start)
 
     mean_time_loop = np.mean(loop_times)
     print("\n  Mean execution of solving IDEE = {:.1e} s".format(mean_time_loop))
     print("  Total execution time = {:.1f} s".format(timer() - time_start))
 
-def f_run_SA(sa_class):
+def run_SA(sa_class):
     """
     Run the sensitivity analysis of the sa_class.
 
-    ...
-
     Input
-    -----
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
-
-    ...
-
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
     Output
-    ------
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
     """
     sorted_results = sa_class.results.copy()
     sorted_samples = sa_class.samples.copy()
@@ -1225,27 +1203,18 @@ def f_run_SA(sa_class):
 
     return sa_class
 
-def f_save_sa_class(sa_class, path):
+def save_sa_class(sa_class, path):
     """
     Save the class sa_class.
 
-     ...
-
     Input
-    -----
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
-    path : string
-        the path to save the class
-
-    ...
-
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
+        path : string
+            the path to save the class
     Output
-    ------
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
-
-
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
     """
                                                                          # save the parameters names
     first_line = ""
@@ -1275,88 +1244,110 @@ def f_save_sa_class(sa_class, path):
             header=first_line
         )
     except AttributeError:
+        print("class is saved without outputs")
         pass
 
-    return sa_class
+    try:
+        bad_array = sa_class["bad_array"]
+        np.savetxt(
+            fname=road.join(path, "bad_array.dat"),
+            X=bad_array,
+        )
+    except KeyError:
+        print("class is saved without bad_array")
+        pass
 
-def f_set_results(sa_class, resdata):
+def set_results(sa_class, resdata, bad_array, outputs_name):
     """
     This function sets the array resdata as the results for SA.
 
-    ...
-
     Input
-    -----
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
-    resdata : numpy.ndarray (float)
-        the result for SA
-
-    ...
-
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
+        resdata : numpy.ndarray (float)
+            the result for SA
+        bad_array : numpy.ndarray (boolean)
+            True if it is a simulation toward the bad attractor
+        outputs_name ; list (string)
+            outputs name
     Output
-    ------
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
     """
+    sa_class["outputs"] = outputs_name
     sa_class.set_results(resdata)
+    sa_class["bad_array"] = bad_array.copy()
 
     return sa_class
 
-def f_sort_attractors(sa_class):
+def set_ylims(select, raw, ax):
+    """
+    Define the ylims on a given period.
+
+    Input
+        select : numpy.ndarray (boolean)
+            the time window selection
+        raw : numpy.ndarray (float)
+            raw data
+        ax : matplotlib.axes.Axes
+            the axe
+    """
+    ax.set_ylim(
+        bottom = np.nanmin(raw[select]),
+        top=np.nanmax(raw[select])
+    )
+
+def sort_attractors(sa_class):
     """
     This function sorts the sa_class in two sets of parameters.
     It corresponds to two different attractors.
 
-    ...
-
     Input
-    -----
-    sa_class : SALib.util.problem.ProblemSpec
-        the class of the library SAlib
-
-    ...
-
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
     Output
-    ------
-    bad_class : SALib.util.problem.ProblemSpec
-        the class with all the bad attractor
-    good_class : SALib.util.problem.ProblemSpec
-        the class with all the good attractor
+        bad_class : SALib.util.problem.ProblemSpec
+            the class with all the bad attractor
+        good_class : SALib.util.problem.ProblemSpec
+            the class with all the good attractor
     """
-    l_outs = sa_class["outputs"]
-    if not ("mean_lambda" in l_outs):
-        raise ValueError("mean_lambda must be in SAlib class outputs")
-    else:
-        ind = l_outs.index("mean_lambda")
+    try:
+        bad_array = sa_class["bad_array"]
+    except KeyError:
+        print("Cannot sort a class without its bad_array")
+        return None, None
                                                                          # creates two classes
     bad_class = ProblemSpec({
-        "num_vars":len(sa_class["names"]),
+        "num_vars":sa_class["num_vars"],
         "names":sa_class["names"],
         "bounds":sa_class["bounds"],
         "outputs":sa_class["outputs"]
     })
     good_class = ProblemSpec({
-        "num_vars":len(sa_class["names"]),
+        "num_vars":sa_class["num_vars"],
         "names":sa_class["names"],
         "bounds":sa_class["bounds"],
         "outputs":sa_class["outputs"]
     })
                                                                          # sort results
-    results = sa_class.results
-    sample = sa_class.samples
+    samples = sa_class.samples
 
-    data = sa_class.results[:,ind]
+    try:
+        size = sa_class.results.size
+        results = sa_class.results
+    except AttributeError:
+        print("Cannot find outputs, ignoring them.")
+        results = np.zeros((samples.size, sa_class["nul_vars"]), dtype=np.bool8)
+
     bad_r, good_r = [], []
     bad_s, good_s = [], []
-    for n, res in enumerate(data):
-        is_bad = abs(res)<INFTY_SMALL or np.isnan(res).any()
-        if is_bad:
+    for n, samp in enumerate(samples):
+        if bad_array[n]:
             bad_r.append(results[n,:])
-            bad_s.append(sample[n,:])
+            bad_s.append(samp)
         else:
             good_r.append(results[n,:])
-            good_s.append(sample[n,:])
+            good_s.append(samp)
 
     bad_r = np.asarray(bad_r)
     bad_s = np.asarray(bad_s)
@@ -1368,20 +1359,22 @@ def f_sort_attractors(sa_class):
         bad_class.set_results(bad_r)
     else:
         print("  there is no bad samples")
+        bad_class = None
 
     if good_s.shape[0] > 0:
         good_class.set_samples(good_s)
         good_class.set_results(good_r)
     else:
         print("  there is no good samples")
+        good_class = None
 
     return bad_class, good_class
 
-def f_test_f_IDEE():
+def test_IDEE():
     """
     This function does a simple test whether we can lunch IDEE.
     """
-    name_dir = f_check_dir()
+    name_dir = check_dir()
     for n, muvalues in enumerate([1.8, 2., 2.2]):
         params = {"mu":muvalues}
         args = {
@@ -1389,21 +1382,49 @@ def f_test_f_IDEE():
             "n":n,
             "name_dir":name_dir
         }
-        f_IDEE(**args)
+        IDEE(**args)
                                                                          # --- main -------------------------
 if __name__=="__main__":
-                                                                         # 1 Functions to make data for SA
-    path = f_check_dir()
-    sa_class = f_make_sa_class(path, POW)
-    f_save_sa_class(sa_class, path)
-    f_run_IDEE(sa_class, path)
-    resdata = f_make_outputs(path, plot_freq=False)
-    sa_class = f_set_results(sa_class, resdata)
-    f_save_sa_class(sa_class, path)
-                                                                         # 2 functions to load data for SA
-    #sa_class_load = f_load_sa_class(path)
-    #print("  Is classes equal?", f_is_close(sa_class, sa_class_load))
-                                                                         # 3 perform the SA
-    #sa_class = f_run_SA(sa_class)
-    badc, goodc = f_sort_attractors(sa_class)
-    f_plot_map(badc, goodc)
+                                                                         # 1. Functions to make data for SA
+    # 1.1 create a path
+    path = check_dir()
+
+    # 1.2 initialize a class
+    sa_class = make_sa_class(path, POW)
+    rep = input("\n  Number of samples is {:d}. Continue? Yes (Y) / No (N):\n".format(
+        sa_class.samples.shape[0]))
+    if not rep=="Y":
+        sys.exit("You chose to quit.")
+
+    # 1.3 save the class
+    save_sa_class(sa_class, path)
+
+    # 1.4 make a set of simulations
+    run_IDEE(sa_class, path)
+
+    # 1.5 compute the outputs
+    resdata, bad_array, outputs_name = make_outputs(path)
+
+    # 1.6 set the results in the class
+    sa_class = set_results(sa_class, resdata, bad_array, outputs_name)
+
+    # 1.7 save the class with the results
+    save_sa_class(sa_class, path)
+                                                                         # 2. Function to load data for SA
+    sa_class_load = load_sa_class(path)
+    print("  Is classes equal?", is_close(sa_class, sa_class_load))
+                                                                         # 3. Perform the SA
+    # 3.1 sort the good and bas attractors
+    badc, goodc = sort_attractors(sa_class)
+
+    # 3.2 plot the map
+    plot_map(badc, goodc)
+
+    # 3.3 make the sensitivity analysis on the good simulations
+    sa_class = run_SA(goodc)
+
+    # 3.4 plot it
+    sa_class.plot()
+    plt.tight_layout(**PADS)
+    plt.savefig(road.join(path, "sa.pdf"))
+    plt.close("all")
