@@ -9,7 +9,6 @@ from sa_idee._sa_idee import TMAX
 from sa_idee._sa_idee import WINDOW_AMP
 from sa_idee._sa_idee import WINDOW_FREQ
 from sa_idee._sa_idee import WINDOW_MEAN
-from sa_idee._sa_idee import PADS
 
 from sa_idee._sa_idee import check_dir
 from sa_idee._sa_idee import make_sa_class
@@ -24,3 +23,4 @@ from sa_idee._sa_idee import plot_map
 from sa_idee._sa_idee import run_SA
 from sa_idee._sa_idee import plot_IDEE
 from sa_idee._sa_idee import sort_attractors
+from sa_idee._sa_idee import plot_sa_class

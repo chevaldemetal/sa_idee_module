@@ -72,6 +72,7 @@ PLOT_LIST = {
 NUMCOLS = 3
 LAST_YEAR = 3000
 TMAX = 3000
+YMIN, YMAX = -0.1, 1.1
                                                                          #--- macros for devs ---------------
 RAISE = True
 COLORS = [
@@ -93,7 +94,7 @@ plt.rc('axes',
                 cycler(linestyle=ls))
 )
                                                                          # 1 capital 18 omega 19 lambda
-INDICES = [1, 18, 19] 
+INDICES = [1, 18, 19]
 COM_IDEE = "./gemmes"
 XMP_FILE = "gemmes.dat.example"
 DAT_FILE = "gemmes.dat.World_default"
@@ -193,7 +194,7 @@ def comp_mean(raw, selectamp):
     This function can be used to compute the mean of the signal.
 
     Input
-        raw : numpy.ndarray (float) 
+        raw : numpy.ndarray (float)
             the data
         selectamp : numpy.ndarray (boolean)
             the selected window
@@ -209,6 +210,25 @@ def comp_mean(raw, selectamp):
     mean = np.nanmin(raw[selectamp]) + damp
 
     return mean, damp
+
+def comp_nb_samples(c):
+    """
+    Compute the number of samples a sa_class has.
+
+    Input
+        c : salib.util.problem.problemspec
+            class of the library salib
+    Ouput
+        c : salib.util.problem.problemspec
+            class updated with nb_samples
+    """
+    try:
+        n = c.samples.shape[0]
+    except Exception:
+        n = 0
+    c["nb_samples"] = n
+
+    return c
 
 def comp_observations(time, raw):
     """
@@ -665,6 +685,7 @@ def load_sa_class(path):
         "outputs":["None"]
     })
     sa_class.set_samples(sample)
+    sa_class = comp_nb_samples(sa_class)
 
     filename = road.join(path, "outputs_to_analyze.dat")
     if road.exists(filename):
@@ -1047,7 +1068,7 @@ def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
         figlam, axlam, axlam1 = plot_main_details_IDEE(time, raw)
         problem_detected = figlam==0
     else:
-        print("financial tiping point")
+        print("private-debt tipping points")
                                                                          # set the labels of the last row
     for j in range(NUMCOLS):
         ax = axes[nbrows-1, j]
@@ -1120,7 +1141,7 @@ def plot_map(badc, goodc):
         bad_sample[:, 1],
         c='r',
         marker='X',
-        label='financial tipping points'
+        label='private-debt tipping points'
     )
     ax.scatter(
         good_sample[:, 0],
@@ -1137,6 +1158,26 @@ def plot_map(badc, goodc):
     plt.close(fig)
 
     return True
+
+def plot_sa_class(sa_class, file_name="sa.pdf", show=False):
+    """
+    Plots sa_class.
+
+    Input
+        file_name : string
+            file name
+        show : boolean
+            if True, show, else save fig
+    """
+    axes = sa_class.plot()
+    axes[0,0].set_ylim(YMIN, YMAX)
+    plt.tight_layout(**PADS)
+    if show:
+        plt.show()
+    else:
+        plt.savefig(file_name)
+        print("figure {} is saved.".format(file_name))
+    plt.close("all")
 
 def run_IDEE(sa_class, name_dir):
     """
@@ -1192,9 +1233,13 @@ def run_SA(sa_class):
         select_rows[i] = False
     sorted_samples = sorted_samples[select_rows,:]
     sorted_results = sorted_results[select_rows,:]
+                                                                         # add noise to the results (to remove divisions by zero)
+    #noise = 1.E-15*np.random.randint(10, size=sorted_results.shape)
+    #sorted_results += noise
                                                                          # update the class
     sa_class.set_samples(sorted_samples)
     sa_class.set_results(sorted_results)
+    sa_class = comp_nb_samples(sa_class)
                                                                          # run the SA
     SA_time_start = timer()
     sa_class.analyze_sobol()
@@ -1357,6 +1402,7 @@ def sort_attractors(sa_class):
     if bad_s.shape[0] > 0:
         bad_class.set_samples(bad_s)
         bad_class.set_results(bad_r)
+        bad_class = comp_nb_samples(bad_class)
     else:
         print("  there is no bad samples")
         bad_class = None
@@ -1364,6 +1410,7 @@ def sort_attractors(sa_class):
     if good_s.shape[0] > 0:
         good_class.set_samples(good_s)
         good_class.set_results(good_r)
+        good_class = comp_nb_samples(good_class)
     else:
         print("  there is no good samples")
         good_class = None
@@ -1424,7 +1471,4 @@ if __name__=="__main__":
     sa_class = run_SA(goodc)
 
     # 3.4 plot it
-    sa_class.plot()
-    plt.tight_layout(**PADS)
-    plt.savefig(road.join(path, "sa.pdf"))
-    plt.close("all")
+    plot_sa_class(sa_class)

@@ -8,10 +8,9 @@ description: Main script of the code to test SA on IDEE.
 """
 import sys
 import sa_idee as sa
-from sa_idee import plt
 import os.path as road
 
-POW = 1
+POW = 7
                                                                          # 1. Functions to make data for SA
 # 1.1 create a path
 path = sa.check_dir()
@@ -51,7 +50,4 @@ sa.plot_map(badc, goodc)
 sa_class = sa.run_SA(goodc)
 
 # 3.4 plot it
-sa_class.plot()
-plt.tight_layout(**sa.PADS)
-plt.savefig(road.join(path, "sa.pdf"))
-plt.close("all")
+sa.plot_sa_class(sa_class)
