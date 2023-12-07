@@ -32,11 +32,13 @@ PADS = {
 POW = 6
 NAMES = [
     "eta",
-    "mu"
+    "mu",
+    "kappa0",
 ]
 BOUNDS = [
     [0.16, 0.22],
-    [1.8, 2.1]
+    [2., 2.05],
+    [0.03176, 0.04764],
 ]
 OUTPUTS = [
     'amplitude',
@@ -50,6 +52,7 @@ OUTPUTS = [
     'omega',
     'productivity_growth',
     'rb',
+    'relaxation_time',
     'relaxation_time_inf',
     'relaxation_time_sup',
     'smallpi',
@@ -58,9 +61,9 @@ OUTPUTS = [
 PLOT_LIST = {
     'capital':'K',
     'g0':'g',
-    'omega':'\omega',
-    'debtratio':'d',
     'lambda':'\lambda',
+    'debtratio':'d',
+    'omega':'\omega',
     'wage_growth':'\dot{w}/w',
     'productivity_growth':'\dot{a}/a',
     'smallpi':'\pi',
@@ -232,13 +235,13 @@ def comp_nb_samples(c):
 
 def comp_observations(time, raw):
     """
-    Compute the observations on the lambda variable.
+    Compute the observations on the omega variable.
 
     Input
         time : numpy.ndarray (float)
             time
         raw : numpy.ndarray (float)
-            the raw signal (most of the time 'lambda')
+            the raw signal (most of the time 'omega')
     Output
         outs : dict (*)
             mean : (float)
@@ -267,165 +270,162 @@ def comp_observations(time, raw):
             initial_times : list (float)
                 the times from which it converges
     """
-    try:
                                                                          # selects
-        selectf = time <= (time[0] + WINDOW_FREQ)
-        selectamp = (time >= (time[-1]+WINDOW_AMP[0])) * \
-            (time <= (time[-1]+WINDOW_AMP[1]))
+    selectf = time <= (time[0] + WINDOW_FREQ)
+    selectamp = (time >= (time[-1]+WINDOW_AMP[0])) * \
+        (time <= (time[-1]+WINDOW_AMP[1]))
                                                                          # compute the amplitude and mean
-        mean, damp = comp_mean(raw, selectamp)
+    mean, damp = comp_mean(raw, selectamp)
                                                                          # compute the main frequency
-        main_freq, sp, f = comp_main_freq(raw[selectf])
-        Tmax = time[selectf]
-        Tmax = Tmax[np.argmax(raw[selectf])]
-        delay = Tmax - time[0]
+    main_freq, sp, f = comp_main_freq(raw[selectf])
+    Tmax = time[selectf]
+    Tmax = Tmax[np.argmax(raw[selectf])]
+    delay = Tmax - time[0]
+
                                                                          # compute the relaxation time
-        gradient = np.gradient(
-            raw + 0.01*np.sin(2.*np.pi*main_freq*(time-delay)),
-            DT
-        )
-        gradient[np.nanargmax(raw)] = 0.
-        gradient[np.nanargmin(raw)] = 0.
-
+    gradient = np.gradient(
+        raw + 0.01*np.sin(2.*np.pi*main_freq*(time-delay)),
+        DT
+    )
+    gradient[np.nanargmax(raw)] = 0.
+    gradient[np.nanargmin(raw)] = 0.
                                                                          # check whether its converges or not
-        anal_sup = hilbert(raw - mean)
-        big_env_sup = np.abs(anal_sup)
-        tmp_sel = time <= (time[0]+100)
-        nanmax_ini, nanmin_ini = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
-        amp_ini = nanmax_ini - nanmin_ini
+    anal_sup = hilbert(raw - mean)
+    big_env_sup = np.abs(anal_sup)
+    tmp_sel = time <= (time[0]+100)
+    nanmax_ini, nanmin_ini = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
+    amp_ini = nanmax_ini - nanmin_ini
 
-        tmp_sel = ((time[0]+300) <= time) * (time <= (time[0]+400))
-        mean_sup_infty = np.nanmean(big_env_sup[tmp_sel])
-        nanmax_infty, nanmin_infty = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
-        amp_infty = nanmax_infty - nanmin_infty
+    tmp_sel = ((time[0]+300) <= time) * (time <= (time[0]+400))
+    mean_sup_infty = np.nanmean(big_env_sup[tmp_sel])
+    nanmax_infty, nanmin_infty = np.nanmax(raw[tmp_sel]), np.nanmin(raw[tmp_sel])
+    amp_infty = nanmax_infty - nanmin_infty
 
-        if (amp_ini >= amp_infty) and (nanmax_ini >= nanmax_infty) and (nanmin_ini <= nanmin_infty):
-            status = "converge"
-        elif (amp_ini <= amp_infty) and (nanmax_ini <= nanmax_infty) and (nanmin_ini >= nanmin_infty):
-            status = "diverge"
-        elif (nanmax_ini >= nanmax_infty) and (nanmin_ini >= nanmin_infty):
-            status = "trans_inf"
-        elif (nanmax_ini <= nanmax_infty) and (nanmin_ini <= nanmin_infty):
-            status = "trans_sup"
-        else:
-            plt.close('all')
-            raise ValueError("No status has been found.")
+    if (amp_ini >= amp_infty) and (nanmax_ini >= nanmax_infty) and (nanmin_ini <= nanmin_infty):
+        status = "converge"
+    elif (amp_ini <= amp_infty) and (nanmax_ini <= nanmax_infty) and (nanmin_ini >= nanmin_infty):
+        status = "diverge"
+    elif (nanmax_ini >= nanmax_infty) and (nanmin_ini >= nanmin_infty):
+        status = "trans_inf"
+    elif (nanmax_ini <= nanmax_infty) and (nanmin_ini <= nanmin_infty):
+        status = "trans_sup"
+    else:
+        plt.close('all')
+        raise ValueError("No status has been found.")
 
-        selpos = ((raw - mean) >= 0.)
-        selneg = ((raw - mean) <= 0.)
-        changing_signs = (np.roll(gradient, -1) * gradient)<=0.
-        sel_sup = changing_signs * selpos
-        sel_inf = changing_signs * selneg
+    selpos = ((raw - mean) >= 0.)
+    selneg = ((raw - mean) <= 0.)
+    changing_signs = (np.roll(gradient, -1) * gradient)<=0.
+    sel_sup = changing_signs * selpos
+    sel_inf = changing_signs * selneg
 
-        tinf = time[sel_inf]
-        rawinf = raw[sel_inf]
+    tinf = time[sel_inf]
+    rawinf = raw[sel_inf]
 
-        if status=="converge" or status=="trans_sup":
-            sel_inf_2 = np.logical_or(
-                ((np.roll(rawinf, -1) - rawinf)>=0.),
-                np.abs(rawinf-mean)<0.1
-            )
-            sel_inf_2[0] = rawinf[0] <= rawinf[1]
-        elif status=="diverge" or status=="trans_inf":
-            sel_inf_2 = [True]*tinf.size
+    if status=="converge" or status=="trans_sup":
+        sel_inf_2 = np.logical_or(
+            ((np.roll(rawinf, -1) - rawinf)>=0.),
+            np.abs(rawinf-mean)<0.1
+        )
+        sel_inf_2[0] = rawinf[0] <= rawinf[1]
+    elif status=="diverge" or status=="trans_inf":
+        sel_inf_2 = [True]*tinf.size
 
-        rawinf = rawinf[sel_inf_2]
-        tinf = tinf[sel_inf_2]
+    rawinf = rawinf[sel_inf_2]
+    tinf = tinf[sel_inf_2]
 
-        tsup = time[sel_sup]
-        rawsup = raw[sel_sup]
+    tsup = time[sel_sup]
+    rawsup = raw[sel_sup]
 
-        if status=="converge" or status=="trans_inf":
-            sel_sup_2 = np.logical_or(
-                ((np.roll(rawsup, -1) - rawsup)<=0.),
-                np.abs(rawsup-mean)<0.1
-            )
-            sel_sup_2[0] = rawinf[0] >= rawinf[1]
-        elif status=="diverge" or status=="trans_sup":
-            sel_sup_2 = [True]*tsup.size
+    if status=="converge" or status=="trans_inf":
+        sel_sup_2 = np.logical_or(
+            ((np.roll(rawsup, -1) - rawsup)<=0.),
+            np.abs(rawsup-mean)<0.1
+        )
+        sel_sup_2[0] = rawinf[0] >= rawinf[1]
+    elif status=="diverge" or status=="trans_sup":
+        sel_sup_2 = [True]*tsup.size
 
-        rawsup = rawsup[sel_sup_2]
-        tsup = tsup[sel_sup_2]
+    rawsup = rawsup[sel_sup_2]
+    tsup = tsup[sel_sup_2]
 
-        xi = np.interp(time, tinf, rawinf)
-        xs = np.interp(time, tsup, rawsup)
+    xi = np.interp(time, tinf, rawinf)
+    xs = np.interp(time, tsup, rawsup)
 
-        xi = np.fmin(xi, mean)
-        xs = np.fmax(xs, mean)
+    xi = np.fmin(xi, mean)
+    xs = np.fmax(xs, mean)
 
-        relax_times = []
-        envs = [xi, xs]
-        ress = []
-        raws = [rawinf, rawsup]
-        labels = ["inf", "sup"]
-        initial_times = []
-        for ii, amp_env in enumerate(envs):
-            notnan = ~np.isnan(amp_env)
-            tmpraw = raws[ii]
+    relax_times = []
+    envs = [xi, xs]
+    ress = []
+    raws = [rawinf, rawsup]
+    labels = ["inf", "sup"]
+    initial_times = []
+    for ii, amp_env in enumerate(envs):
+        notnan = ~np.isnan(amp_env)
+        tmpraw = raws[ii]
 
-            nanmax, nanmin = np.nanmax(amp_env), np.nanmin(amp_env)
+        nanmax, nanmin = np.nanmax(amp_env), np.nanmin(amp_env)
                                                                          # here we define the sign of the
                                                                          # desired slope
-            if ii==0:
-                if status=="converge" or status=="trans_sup":
-                    y = nanmax
-                    scale = 1.
-                elif status=="diverge" or status=="trans_inf":
-                    y = nanmin
-                    scale = -1.
-            else:
-                if status=="converge" or status=="trans_inf":
-                    y = nanmin
-                    scale = -1.
-                elif status=="diverge" or status=="trans_sup":
-                    y = nanmax
-                    scale = 1.
+        if ii==0:
+            if status=="converge" or status=="trans_sup":
+                y = nanmax
+                scale = 1.
+            elif status=="diverge" or status=="trans_inf":
+                y = nanmin
+                scale = -1.
+        else:
+            if status=="converge" or status=="trans_inf":
+                y = nanmin
+                scale = -1.
+            elif status=="diverge" or status=="trans_sup":
+                y = nanmax
+                scale = 1.
 
-            Delta = np.gradient(amp_env, DT)
-            Delta[np.logical_not(np.sign(Delta)==scale)] = 0.
+        Delta = np.gradient(amp_env, DT)
+        Delta[np.logical_not(np.sign(Delta)==scale)] = 0.
 
-            argD = np.nanargmax(np.abs(Delta))
-            slope = Delta[argD]
-            not_zero = np.abs(Delta)>INFTY_SMALL
+        argD = np.nanargmax(np.abs(Delta))
+        slope = Delta[argD]
+        not_zero = np.abs(Delta)>INFTY_SMALL
 
+        if (np.count_nonzero(not_zero)==0) or (slope==0.):
+            tmpraw = [amp_env[0]]
+            ts = [time[-1]]
+            slope = 1.E-15
+        else:
             tmpraw = amp_env[not_zero]
             ts = time[not_zero]
-            intercept = tmpraw[0] - slope*ts[0]
-            res = {"slope":slope, "intercept":intercept}
+        intercept = tmpraw[0] - slope*ts[0]
+        res = {"slope":slope, "intercept":intercept}
 
-            tmp = res["intercept"] + res["slope"]*time
+        tmp = res["intercept"] + res["slope"]*time
 
-            t = (y - res["intercept"]) / res["slope"] - ts[0]
-            relax_times.append(t)
-            initial_times.append(ts[0])
-            ress.append(res)
+        t = (y - res["intercept"]) / res["slope"] - ts[0]
+        relax_times.append(t)
+        initial_times.append(ts[0])
+        ress.append(res)
 
-        label = labels[np.argmin(relax_times)]
-        relax_time = np.min(relax_times)
+    label = labels[np.argmin(relax_times)]
+    relax_time = np.min(relax_times)
 
-        outs = {
-            "mean":mean,
-            "main_freq":main_freq,
-            "relax_time":relax_time,
-            "damp":damp
-        }
-        buffs = {
-            "delay":delay,
-            "xi":xi,
-            "xs":xs,
-            "ress":ress,
-            "relax_times":relax_times,
-            "label":label,
-            "status":status,
-            "initial_times":initial_times
-        }
-
-    except Exception:
-        print("Problem in 'comp_observations'")
-        if RAISE:
-            print(outs)
-            print(buffs)
-            raise
+    outs = {
+        "mean":mean,
+        "main_freq":main_freq,
+        "relax_time":relax_time,
+        "damp":damp
+    }
+    buffs = {
+        "delay":delay,
+        "xi":xi,
+        "xs":xs,
+        "ress":ress,
+        "relax_times":relax_times,
+        "label":label,
+        "status":status,
+        "initial_times":initial_times
+    }
 
     return outs, buffs
 
@@ -578,6 +578,7 @@ def make_outputs(path):
     output_list = OUTPUTS.copy()
     output_list.remove('amplitude')
     output_list.remove('main_frequency')
+    output_list.remove('relaxation_time')
     output_list.remove('relaxation_time_inf')
     output_list.remove('relaxation_time_sup')
 
@@ -607,23 +608,26 @@ def make_outputs(path):
         if not bad_array[n]:
             for var in output_list:
                 raw = 100.*data[:, lvars.index(var)]
-                if var=="lambda":
+                if var=="omega":
                     outs, buffs = comp_observations(time, raw)
                 mean, damp = comp_mean(raw, selectamp)
                 outputs[var] = mean
 
+            outputs["amplitude"] = outs["damp"]
             outputs["main_frequency"] = outs["main_freq"]
+            outputs["relaxation_time"] = outs["relax_time"]
             outputs["relaxation_time_inf"] = buffs["relax_times"][0]
             outputs["relaxation_time_sup"] = buffs["relax_times"][1]
-            outputs["amplitude"] = outs["damp"]
+
         else:
             for var in OUTPUTS:
                 outputs[var] = 0.
 
+            outputs["amplitude"] = 0.
             outputs["main_frequency"] = 0.
+            outputs["relaxation_time"] = 0.
             outputs["relaxation_time_inf"] = 0.
             outputs["relaxation_time_sup"] = 0.
-            outputs["amplitude"] = 0.
 
         keys = sorted(list(outputs.keys()))
         line = []
@@ -633,21 +637,25 @@ def make_outputs(path):
 
     return results, bad_array, keys
 
-def make_sa_class(name_dir, Pow=2):
+def make_sa_class(Pow=2, names=NAMES, bounds=BOUNDS):
     """
     This function makes a class of the library SAlib with the required parameters.
 
     Input
         Pow : integer
             the power used to determine the sample size
+        names : list (string)
+            name of variables in the SA
+        bounds : list (integer)
+            bounds of the variables
     Ouput
         sa_class : SALib.util.problem.ProblemSpec
             the class of the library SAlib
     """
     sa_class = ProblemSpec({
-        "num_vars":2,
-        "names":NAMES,
-        "bounds":BOUNDS,
+        "num_vars":len(names),
+        "names":names,
+        "bounds":bounds,
         "outputs":OUTPUTS,
     })
                                                                          # get the parameters
@@ -696,8 +704,9 @@ def load_sa_class(path):
         sa_class["outputs"] = out_names
         sa_class.set_results(results)
     else:
-        rep = input("Enter list of outputs separated with a w-space (ex: lambda omega freq)\n")
-        sa_class["outputs"] = rep.split(' ')
+        sa_class["outputs"] = OUTPUTS
+        print("Outputs cannot be found. Defaults outputs are assigned.")
+        print(OUTPUTS)
 
     filename = road.join(path, "bad_array.dat")
     if road.exists(filename):
@@ -705,6 +714,63 @@ def load_sa_class(path):
         sa_class["bad_array"] = bad_array.copy()
 
     return sa_class
+
+def perso_savefig(fig, path, figure_name, show):
+    """
+    Personal function for saving figures.
+
+    Input
+        fig : matplotlib.pyplot.Figure
+            figure
+        path : string
+            path of data
+        figure_name : string
+            name of figure
+        show : boolean
+            if True show, else save figure
+    """
+    if not show:
+        plt.tight_layout(**PADS)
+        plt.savefig(road.join(path, figure_name),
+            bbox_inches="tight", pad_inches=0.1,
+        )
+        print("save figure {}".format(road.join(path, figure_name)))
+        plt.close(fig)
+    else:
+        plt.show()
+    plt.close(fig)
+
+def plot_histo(c, path, n_bins=20, figure_name="histograms.pdf", show=False):
+    """
+    Plot histograms of results.
+
+    Input
+        c : SALib.util.problem.ProblemSpec
+            class of the library SAlib
+        path : string
+            path of the data
+        n_bins : integer
+            number of bins
+        figure_name : string
+            file name
+        show : boolean
+            if True, show else save figure
+    """
+    nbrows, nbcols = 4, 4
+    try:
+        s = c.results.size
+    except AttributeError:
+        print("Cannot draw histograms without results.")
+        pass
+                                                                         # plot histograms
+    fig, axes = plt.subplots(nbrows, nbcols)
+    for n, out in enumerate(c["outputs"]):
+        i, j = n//nbcols, n%nbcols
+        ax = axes[i, j]
+        ax.hist(c.results[:, n], bins=n_bins)
+        ax.set_ylabel(out)
+
+    perso_savefig(fig, path, figure_name, show)
 
 def plot_main_details_IDEE(time, raw):
     """
@@ -715,7 +781,7 @@ def plot_main_details_IDEE(time, raw):
         time : numpy.ndarray (float)
             time
         raw : numpy.ndarray (float)
-            the raw signal (most of the time 'lambda')
+            the raw signal (most of the time 'omega')
     Output
         figlam : matplotlib.pyplot.figure
             figure with all details
@@ -975,7 +1041,7 @@ def plot_main_details_IDEE(time, raw):
 
     return figlam, axlam, axlam1
 
-def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
+def plot_IDEE(path, file_name, figure_name="omega.pdf", figure_name_all="all.pdf", show=False):
     """
     This function plots the main variables of IDEE.
 
@@ -985,11 +1051,11 @@ def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
         file_name : string
             name of file
         figure_name : string
-            name of figure 'lambda'
+            name of figure 'omega'
         figure_name_all : string
             name of figure 'all'
-        savefig : boolean
-            True if we save the figure, show if False
+        show : boolean
+            True if we show else save figures
     """
     badpath = road.join(path, "png_bad")
     goodpath = road.join(path, "png_good")
@@ -1010,7 +1076,6 @@ def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
     time = data[:,0]
     select = (time >= (time[-1]+WINDOW_AMP[0])) * \
         (time <= (time[-1]+WINDOW_AMP[1]))
-    select_ylim = time <= YLIM_YEAR
                                                                          # calculate the number of axes
     plot_list_keys = list(PLOT_LIST.keys())
     nb_p = len(plot_list_keys)
@@ -1040,7 +1105,6 @@ def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
                     raw = 1./data[:, lvars.index(var)]
                     mean, damp = comp_mean(raw, select)
                     ax.set_ylabel(r"$1/d$")
-                    set_ylims(select_ylim, raw, ax)
                 elif var=="capital":
                     raw = data[:, lvars.index(var)]
                     mean = np.nan
@@ -1049,7 +1113,6 @@ def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
                     raw = 100*data[:, lvars.index(var)]
                     mean, damp = comp_mean(raw, select)
                     ax.set_ylabel(r"${}$".format(PLOT_LIST[var])) # var.replace("_", "\n"))
-                    #set_ylims(select_ylim, raw, ax)
 
                 mean = mean if not is_bad else np.nan
                 raw[ylim_year:] = raw[ylim_year]
@@ -1059,12 +1122,12 @@ def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
                 pass
             finally:
                 k += 1
-                                                                         # For lambda,
+                                                                         # For omega,
                                                                          # compute and plot details in
                                                                          # another figure
     problem_detected = is_bad
     if not problem_detected:
-        raw = 100*data[:, lvars.index("lambda")]
+        raw = 100*data[:, lvars.index("omega")]
         figlam, axlam, axlam1 = plot_main_details_IDEE(time, raw)
         problem_detected = figlam==0
     else:
@@ -1079,36 +1142,18 @@ def plot_IDEE(path, file_name, figure_name, figure_name_all, savefig=False):
         for axl in [axlam, axlam1]:
             axl.set_xlim(time[0], LAST_YEAR)
             axl.set_xlabel(r"$t$ (y)")
-        axlam.set_ylabel(r"$\lambda$ (%)")
+        axlam.set_ylabel(r"$\omega$ (%)")
         axlam1.legend(framealpha=1.)
         axlam.legend(framealpha=1., ncol=3)
 
-    if savefig:
-
-        if not problem_detected:
-            name = road.join(goodpath, figure_name)
-            print("saving of {}".format(figure_name))
-            plt.savefig(name,
-                bbox_inches="tight", pad_inches=0.1,
-            )
-            plt.close(figlam)
-            name = road.join(goodpath, figure_name_all)
-        else:
-            name = road.join(badpath, figure_name_all)
-
-        print("saving of {}".format(figure_name_all))
-        plt.tight_layout(**PADS)
-        plt.savefig(name,
-            bbox_inches="tight", pad_inches=0.1,
-        )
-        plt.close(fig)
+        perso_savefig(figlam, goodpath, figure_name, show)
+        name_path = goodpath
     else:
-                                                                         # show
-        ax.set_xlim(time[0], LAST_YEAR)
-        plt.show()
-        plt.close('all')
+        name_path = badpath
 
-def plot_map(badc, goodc):
+    perso_savefig(fig, name_path, figure_name_all, show)
+
+def plot_map(badc, goodc, path, figure_name="map.pdf", show=False):
     """
     This function is used to map the range of parameters.
     The criterion is good or bad attractors.
@@ -1118,6 +1163,12 @@ def plot_map(badc, goodc):
             the class with all the bad attractor
         goodc : SALib.util.problem.ProblemSpec
             the class with all the good attractor
+        path : string
+            path of the data
+        figure_name : string
+            file name
+        show : boolean
+            if True, show else save
     Output
         isplot : boolean
             True if there is a plot, False else
@@ -1154,17 +1205,21 @@ def plot_map(badc, goodc):
     ax.set_xlabel(names[0])
     ax.set_ylabel(names[1])
     ax.legend(framealpha=1.)
-    plt.show()
-    plt.close(fig)
+
+    perso_savefig(fig, path, figure_name, show) 
 
     return True
 
-def plot_sa_class(sa_class, file_name="sa.pdf", show=False):
+def plot_sa_class(sa_class, path, figure_name="sa.pdf", show=False):
     """
     Plots sa_class.
 
     Input
-        file_name : string
+        sa_class : SALib.util.problem.ProblemSpec
+            the class with all the bad attractor
+        path : string
+            path of data
+        figure_name : string
             file name
         show : boolean
             if True, show, else save fig
@@ -1172,12 +1227,9 @@ def plot_sa_class(sa_class, file_name="sa.pdf", show=False):
     axes = sa_class.plot()
     axes[0,0].set_ylim(YMIN, YMAX)
     plt.tight_layout(**PADS)
-    if show:
-        plt.show()
-    else:
-        plt.savefig(file_name)
-        print("figure {} is saved.".format(file_name))
-    plt.close("all")
+
+    fig = plt.gcf()
+    perso_savefig(fig, path, figure_name, show)
 
 def run_IDEE(sa_class, name_dir):
     """
@@ -1437,7 +1489,7 @@ if __name__=="__main__":
     path = check_dir()
 
     # 1.2 initialize a class
-    sa_class = make_sa_class(path, POW)
+    sa_class = make_sa_class(POW)
     rep = input("\n  Number of samples is {:d}. Continue? Yes (Y) / No (N):\n".format(
         sa_class.samples.shape[0]))
     if not rep=="Y":
@@ -1464,11 +1516,18 @@ if __name__=="__main__":
     # 3.1 sort the good and bas attractors
     badc, goodc = sort_attractors(sa_class)
 
-    # 3.2 plot the map
-    plot_map(badc, goodc)
-
-    # 3.3 make the sensitivity analysis on the good simulations
+    # 3.2 make the sensitivity analysis on the good simulations
     sa_class = run_SA(goodc)
+                                                                         # 4. Plots
+    # 4.1 plot the map
+    plot_map(badc, goodc, path)
 
-    # 3.4 plot it
-    plot_sa_class(sa_class)
+    # 4.2 plot it
+    plot_sa_class(sa_class, path)
+
+    # 4.3 plot histograms
+    plot_histo(sa_class, path)
+
+    # 4.4 plot IDEE
+    file_name = "gemmes.out.World_default_set0"
+    plot_IDEE(path, file_name)

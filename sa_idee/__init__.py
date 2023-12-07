@@ -24,3 +24,4 @@ from sa_idee._sa_idee import run_SA
 from sa_idee._sa_idee import plot_IDEE
 from sa_idee._sa_idee import sort_attractors
 from sa_idee._sa_idee import plot_sa_class
+from sa_idee._sa_idee import plot_histo
