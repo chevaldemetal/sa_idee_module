@@ -5,6 +5,14 @@ date: 20/11/2023
 author: Hugo A. Martin
 email: martin_hugo@ymail.com
 description: This module is can be used to run the sensitivity analysis of the model IDEE.
+
+TODO:
+
+- negative S1
+- - remove extreme values in outputs
+- - test the centered method https://github.com/SALib/SALib/issues/109
+- - increase the sample
+- - test other methods than Sobol's one
 """
                                                                          #--- imports -----------------------
 import sys, os, shutil
@@ -103,6 +111,7 @@ XMP_FILE = "gemmes.dat.example"
 DAT_FILE = "gemmes.dat.World_default"
 OUT_FILE = "gemmes.out.World_default"
 DIR_IDEE = "/home/admin/Documents/sciences/postdocGU/codes/GEMMESCLIM/gemmes_cpl/sources/"
+RAW_PATH = "raw_data"
 DIR_LOC = os.getcwd()
 DIR_SAVE = road.join(DIR_LOC, "outputs_")
 DT = 1./12
@@ -331,9 +340,6 @@ def comp_observations(time, raw):
     elif status=="diverge" or status=="trans_inf":
         sel_inf_2 = [True]*tinf.size
 
-    rawinf = rawinf[sel_inf_2]
-    tinf = tinf[sel_inf_2]
-
     tsup = time[sel_sup]
     rawsup = raw[sel_sup]
 
@@ -342,9 +348,12 @@ def comp_observations(time, raw):
             ((np.roll(rawsup, -1) - rawsup)<=0.),
             np.abs(rawsup-mean)<0.1
         )
-        sel_sup_2[0] = rawinf[0] >= rawinf[1]
+        sel_sup_2[0] = rawsup[0] >= rawsup[1]
     elif status=="diverge" or status=="trans_sup":
         sel_sup_2 = [True]*tsup.size
+
+    rawinf = rawinf[sel_inf_2]
+    tinf = tinf[sel_inf_2]
 
     rawsup = rawsup[sel_sup_2]
     tsup = tsup[sel_sup_2]
@@ -571,10 +580,12 @@ def make_outputs(path):
         keys : list (string)
             outputs names
     """
+    name_dir = road.join(path, RAW_PATH)
     samples = np.loadtxt(road.join(path, "sample.dat"))
     nums = samples.shape[0]
     bad_array = np.zeros(nums, dtype=np.bool8)
     nb_len = len(OUTPUTS)
+    keys = sorted(list(OUTPUTS))
     output_list = OUTPUTS.copy()
     output_list.remove('amplitude')
     output_list.remove('main_frequency')
@@ -582,13 +593,30 @@ def make_outputs(path):
     output_list.remove('relaxation_time_inf')
     output_list.remove('relaxation_time_sup')
 
-    print("  {:d} simulations to do".format(nums))
-    results = np.zeros((nums, nb_len))
-    for n in range(nums):
-        if n%10==0:
-            print('   {:d}'.format(n))
+    results = np.ones((nums, nb_len))
+                                                                         # check whether there is an existing file
+    tmp_file_name = road.join(name_dir, "outputs_in_process.dat")
+    tmp_bad_name = road.join(name_dir, "badarray_in_process.dat")
+    if road.exists(tmp_file_name) and road.exists(tmp_bad_name):
+        print("Loading {}".format(tmp_file_name))
+        print("Loading {}".format(tmp_bad_name))
+        results = np.loadtxt(fname=tmp_file_name)
+        bad_array = np.loadtxt(tmp_bad_name).astype(np.bool8)
+        tmp = np.sum(results, axis=1)==nb_len
+        if tmp.any():
+            first_ind = np.argmax(tmp)
+            print("\nMake outputs from {:d}".format(first_ind))
+        else:
+            first_ind = tmp.size
+            print("\nAll results are already computed.")
+    else:
+        print("No {} found.\nStart from 0.".format(tmp_file_name + " " + tmp_bad_name))
+        first_ind = 0
+
+    print("  {:d} simulations to do".format(nums-first_ind))
+    for n in range(first_ind, nums):
                                                                          # load here
-        file_name = road.join(path, OUT_FILE+'_set{:d}'.format(n))
+        file_name = road.join(name_dir, OUT_FILE+'_set{:d}'.format(n))
         data = np.loadtxt(file_name, skiprows=1)
                                                                          # check whether it is bad attracted
         bad_array[n] = check_bad_attractor(data)
@@ -629,11 +657,15 @@ def make_outputs(path):
             outputs["relaxation_time_inf"] = 0.
             outputs["relaxation_time_sup"] = 0.
 
-        keys = sorted(list(outputs.keys()))
         line = []
         for key in keys:
             line.append(outputs[key])
         results[n, :] = line
+                                                                         # save the temporary file all 10th
+        if (n%10==0) or (n==nums-1):
+            print('   {:d}'.format(n))
+            np.savetxt(fname=tmp_file_name, X=results)
+            np.savetxt(fname=tmp_bad_name, X=bad_array)
 
     return results, bad_array, keys
 
@@ -1059,14 +1091,15 @@ def plot_IDEE(path, file_name, figure_name="omega.pdf", figure_name_all="all.pdf
     """
     badpath = road.join(path, "png_bad")
     goodpath = road.join(path, "png_good")
+    namedir = road.join(path, RAW_PATH)
     if not road.exists(badpath):
         os.mkdir(badpath)
     if not road.exists(goodpath):
         os.mkdir(goodpath)
                                                                          # load data
-    data = np.loadtxt(road.join(path, file_name), skiprows=1)
+    data = np.loadtxt(road.join(namedir, file_name), skiprows=1)
                                                                          # load variable names
-    f = open(road.join(path, file_name), "r")
+    f = open(road.join(namedir, file_name), "r")
     lvars = f.readline()
     f.close()
     lvars = lvars.split('  ')[:-1]
@@ -1210,7 +1243,7 @@ def plot_map(badc, goodc, path, figure_name="map.pdf", show=False):
 
     return True
 
-def plot_sa_class(sa_class, path, figure_name="sa.pdf", show=False):
+def plot_sa_class(sa_class, path, ylims=[YMIN, YMAX], figure_name="sa.pdf", show=False):
     """
     Plots sa_class.
 
@@ -1225,25 +1258,29 @@ def plot_sa_class(sa_class, path, figure_name="sa.pdf", show=False):
             if True, show, else save fig
     """
     axes = sa_class.plot()
-    axes[0,0].set_ylim(YMIN, YMAX)
+    axes[0,0].set_yscale('log')
+    #axes[0,0].set_ylim(ylims[0], ylims[1])
     plt.tight_layout(**PADS)
 
     fig = plt.gcf()
     perso_savefig(fig, path, figure_name, show)
 
-def run_IDEE(sa_class, name_dir):
+def run_IDEE(sa_class, path):
     """
     This function makes a sensivity analysis of the model IDEE.
 
     Input
         sa_class : SALib.util.problem.ProblemSpec
             the class of the library SAlib
-        name_dir : string
+        path : string
             the  directory where to save IDEE's outputs
     """
                                                                          # define a global timer
     time_start = timer()
     nbmax = sa_class.samples.shape[0]
+    name_dir = road.join(path, RAW_PATH)
+    if not road.exists(name_dir):
+        os.mkdir(name_dir)
                                                                          # run the model
     names = sa_class["names"]
     loop_times = []
