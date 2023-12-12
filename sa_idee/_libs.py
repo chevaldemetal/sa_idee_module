@@ -22,6 +22,7 @@ from scipy.stats import linregress
 import os.path as road
 from cycler import cycler
 from matplotlib.colors import CSS4_COLORS as COLORS
+from matplotlib import cm
                                                                          # --- macros -----------------------
                                                                          # macros for user
 POW = 6

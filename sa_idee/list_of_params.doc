@@ -1,12 +1,19 @@
-! Workforce
-phi0=-0.292 ! Constant of the short-term Philips curve
-phi1=0.469 ! Slope of the short-term Philips curve
-wage_type=1 ! 0 as Coping 2020, 1 with gammaw*i
+- Workforce
+--- Constant of the short-term Philips curve
+    phi0 = -0.292 (0.5)
+--- Slope of the short-term Philips curve
+    phi1 = 0.469 (0.9)
+
+
 gammaw=0.5 ! factor in wage equation
-prod_type=1 ! Type of alpha in productivity
+
 kaldor_verdoorn=0.5 ! g factor in: dot a / a = alpha + kv g
+
 alpha=0.003 ! constant growth rate of productivity
-alphamin=-0.02 !
+
+alphamin=-0.02
+
+
 
 ! Workforce growth
 pop_type=0 ! type of population growth (0, converges to npopbar, 1, third order poly)
@@ -131,3 +138,8 @@ t_ini=2015. !
 ! Numerical parameters
 dt=1./360 !
 tmax=2100. !
+
+------------------------------------------------------------------------
+
+wage_type=1 ! 0 as Coping 2020, 1 with gammaw*i
+prod_type=1 ! Type of alpha in productivity

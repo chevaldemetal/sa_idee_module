@@ -28,3 +28,4 @@ from sa_idee._plot_func import plot_sa_class
 from sa_idee._plot_func import plot_histo
 from sa_idee._plot_func import plot_map
 from sa_idee._plot_func import plot_phillips
+from sa_idee._plot_func import plot_gammaw

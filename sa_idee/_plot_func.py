@@ -520,7 +520,7 @@ def plot_map(badc, goodc, path, figure_name="map.pdf", show=False):
     ax.set_ylabel(names[1])
     ax.legend(framealpha=1.)
 
-    perso_savefig(fig, path, figure_name, show) 
+    perso_savefig(fig, path, figure_name, show)
 
     return True
 
@@ -547,16 +547,55 @@ def plot_phillips(rad0=0.5, rad1=0.9, nb=10):
         for m, p1 in enumerate(phi1):
             phi = phi0[n] + phi1[m]*OMEGA
             ax.plot(
-                OMEGA, 
-                phi, 
+                OMEGA,
+                phi,
                 color="k",
                 linestyle="-",
             )
     ax.plot(OMEGA, PHI0 + PHI1*OMEGA, color="r")
-    ax.fill_between(OMEGA, -0.2, 0.2, color="lightgray", alpha=0.5)
-    ax.fill_between([0.5, 0.8], -0.3, 0.3, color="lightgray")
-    ax.set_ylabel(r"\phi")
-    ax.set_xlabel(r"\omega")
+    ax.fill_between(OMEGA, -0.2, 0.2, color="k", alpha=0.25, zorder=100)
+    ax.fill_between([0.5, 0.8], -0.3, 0.3, color="k", alpha=0.25, zorder=100)
+    ax.set_ylabel(r"$\varphi$")
+    ax.set_xlabel(r"$\omega$")
+    plt.show()
+    plt.close(fig)
+
+def plot_gammaw(rad=0.25, nb=4):
+    """
+    Plot the influence of gammaw on inflation.
+
+    Input
+        rad : float
+            radius of gammaw param \in [(1+-rad)*GAMMAW]
+        nb : integer
+            number of lines
+    """
+    GAMMAW = 0.5
+    PHI0, PHI1 = -0.292, 0.469
+    OMEGA = np.linspace(0., 1., 1000)
+    I = np.linspace(-0.5, 0.5, 1000)
+    gammaw = np.linspace((1.-rad)*GAMMAW, (1.+rad)*GAMMAW, nb)
+    OMEGA, I = np.meshgrid(OMEGA, I)
+
+    fig = plt.figure()
+    ax = plt.axes(projection="3d")
+
+    for gamma in gammaw:
+        ax.plot_surface(
+            X=OMEGA,
+            Y=I,
+            Z=PHI0 + PHI1*OMEGA + gamma*I,
+            cmap=cm.coolwarm
+        )
+    ax.plot_surface(
+        X=OMEGA,
+        Y=I,
+        Z=PHI0 + PHI1*OMEGA + GAMMAW*I,
+        color="grey"
+    )
+    ax.set_xlabel(r"$\omega$")
+    ax.set_ylabel(r"$i$")
+    ax.set_zlabel(r"$\phi$")
     plt.show()
     plt.close(fig)
 
