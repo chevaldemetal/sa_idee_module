@@ -8,15 +8,7 @@ description: This module is can be used to run the sensitivity analysis of the m
 
 TODO:
 
-- negative S1
-- - faire un histogramme et enlever les valeurs aberrantes
-- - relaxation time très très grands#
-- - relaxation time très très grands
-- - compare S1 and histograms
-- - remove extreme values in outputs
-- - test the centered method https://github.com/SALib/SALib/issues/109
-- - increase the sample
-- - test other methods than Sobol's one
+-- faire de groupes
 """
                                                                          #--- imports -----------------------
 from sa_idee._libs import *

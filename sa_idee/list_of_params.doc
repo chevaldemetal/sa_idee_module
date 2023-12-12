@@ -1,27 +1,20 @@
 - Workforce
 --- Constant of the short-term Philips curve
-    phi0 = -0.292 (0.5)
+        phi0 = -0.292 (-0.146000, -0.438000)
 --- Slope of the short-term Philips curve
-    phi1 = 0.469 (0.9)
+        phi1 = 0.469 (0.316575, 0.621425)
+--- factor in wage equation
+        gammaw = 0.5 (0.000000, 1.000000)
+--- g factor in: dot a / a = alpha + kv g
+        kaldor_verdoorn = 0.5 (0.125000, 0.875000)
+--- constant growth rate of productivity
+        alpha = 0.003 (-0.004500, 0.010500)
 
-
-gammaw=0.5 ! factor in wage equation
-
-kaldor_verdoorn=0.5 ! g factor in: dot a / a = alpha + kv g
-
-alpha=0.003 ! constant growth rate of productivity
-
-alphamin=-0.02
-
-
-
-! Workforce growth
-pop_type=0 ! type of population growth (0, converges to npopbar, 1, third order poly)
-deltanpop=0.0305 ! leading growth rate of workforce
-npopbar=7.056 ! maximum population in the logistic evolution
-pop2=0.000001464
-pop1=-0.009025626
-pop0=18.539646684
+- Workforce growth
+--- leading growth rate of workforce
+        deltanpop = 0.0305 (0.015250, 0.045750)
+--- maximum population in the logistic evolution
+        npopbar = 7.056 (6.350400, 7.761600)
 
 ! Capital
 capital_type=1 ! 0, like Bovari 2020, 1, with Kb
@@ -143,3 +136,10 @@ tmax=2100. !
 
 wage_type=1 ! 0 as Coping 2020, 1 with gammaw*i
 prod_type=1 ! Type of alpha in productivity
+alphamin=-0.02
+
+pop_type=0
+pop2=0.000001464
+pop1=-0.009025626
+pop0=18.539646684
+

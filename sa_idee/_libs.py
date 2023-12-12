@@ -8,21 +8,26 @@ description: libraries
 """
                                                                          # --- imports ----------------------
 import sys, os, shutil
+import os.path as road
 import subprocess
+
 import numpy as np
-from matplotlib import rcParams
+from scipy.signal import hilbert
+from scipy.stats import linregress
+from scipy.integrate import RK45
+
 import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib import rcParams
 from matplotlib.gridspec import GridSpec
+from matplotlib.colors import CSS4_COLORS as COLORS
+from cycler import cycler
+
 from SALib.sample import saltelli
 from SALib.analyze import sobol
 from SALib import ProblemSpec
+
 from timeit import default_timer as timer
-from scipy.signal import hilbert
-from scipy.stats import linregress
-import os.path as road
-from cycler import cycler
-from matplotlib.colors import CSS4_COLORS as COLORS
-from matplotlib import cm
                                                                          # --- macros -----------------------
                                                                          # macros for user
 POW = 6

@@ -524,7 +524,107 @@ def plot_map(badc, goodc, path, figure_name="map.pdf", show=False):
 
     return True
 
-def plot_phillips(rad0=0.5, rad1=0.9, nb=10):
+def plot_param_aa(name, start, stop):
+    """
+    Plot bounds
+
+    Input
+        start : float
+            inf bound
+        stop : float
+            sup bound
+    """
+    print("{}: ({:.6f}, {:.6f})".format(name, start, stop))
+
+def plot_param_adot(radalpha=2.5, radkv=0.75, nb=5):
+    """
+    Plot the productivity growth.
+
+    Input
+        radalpha : float
+            the radius of alpha
+        radkv : float
+            the radius of the KV coefficient
+        nb : integer
+            number of lines
+    """
+    ALPHAC, KVC = 0.003, 0.5
+
+    b_a = {"start":(1.-radalpha)*ALPHAC, "stop":(1.+radalpha)*ALPHAC}
+    b_k = {"start":(1.-radkv)*KVC, "stop":(1.+radkv)*KVC}
+
+    ALPHA = np.linspace(**b_a, num=nb)
+    KV = np.linspace(**b_k, num=nb)
+    G = np.linspace(-0.2, 0.2, 1000)
+
+    fig, ax = plt.subplots()
+    ax.plot(G, [0.]*G.size, linestyle="--", color="gray")
+    for alpha in ALPHA:
+        for kv in KV:
+            ax.plot(
+                G,
+                alpha + kv*G,
+                color="k",
+                linestyle="-",
+            )
+    ax.plot(
+        G,
+        ALPHAC + KVC*G,
+        color="r",
+        linestyle="-"
+    )
+    ax.fill_between(G, -0.05, 0.05, color="k", alpha=0.25, zorder=100)
+    ax.fill_between([-0.05, 0.05], -0.05, 0.05, color="k", alpha=0.25, zorder=100)
+    ax.set_xlabel(r"growth rate ($g$)")
+    ax.set_ylabel(r"growth rate of wages ($\dot{a}/a$)")
+    plt.show()
+    plt.close(fig)
+
+    plot_param_aa("alpha", **b_a)
+    plot_param_aa("kaldoor-verdon", **b_k)
+
+def plot_param_gammaw(rad=1., nb=5):
+    """
+    Plot the influence of gammaw on inflation.
+
+    Input
+        rad : float
+            radius of gammaw param \in [(1+-rad)*GAMMAW]
+        nb : integer
+            number of lines
+    """
+    GAMMAW = 0.5
+    PHI0, PHI1 = -0.292, 0.469
+    OMEGA = np.linspace(0.5, 0.7, 100)
+    I = np.linspace(-0.05, 0.05, 100)
+    b_a = {"start":(1.-rad)*GAMMAW, "stop":(1.+rad)*GAMMAW}
+    gammaw = np.linspace(**b_a, num=nb)
+    OMEGA, I = np.meshgrid(OMEGA, I)
+
+    fig = plt.figure()
+    ax = plt.axes(projection="3d")
+    for gamma in gammaw:
+        ax.plot_surface(
+            X=OMEGA,
+            Y=I,
+            Z=PHI0 + PHI1*OMEGA + gamma*I,
+            cmap=cm.coolwarm
+        )
+    ax.plot_surface(
+        X=OMEGA,
+        Y=I,
+        Z=PHI0 + PHI1*OMEGA + GAMMAW*I,
+        color="grey"
+    )
+    ax.set_xlabel(r"wage share ($\omega$)")
+    ax.set_ylabel(r"inflation ($i$)")
+    ax.set_zlabel(r"Phillips curve ($\varphi$)")
+    plt.show()
+    plt.close(fig)
+
+    plot_param_aa("gammaw", **b_a)
+
+def plot_param_phillips(rad0=0.5, rad1=0.325, nb=5):
     """
     Plot the phillips curve.
 
@@ -539,10 +639,13 @@ def plot_phillips(rad0=0.5, rad1=0.9, nb=10):
     OMEGA = np.linspace(0., 1., 1000)
     PHI0, PHI1 = -0.292, 0.469
 
+    a = {"start":(1.-rad0)*PHI0, "stop":(1.+rad0)*PHI0}
+    b = {"start":(1.-rad1)*PHI1, "stop":(1.+rad1)*PHI1}
+
     fig, ax = plt.subplots()
     ax.plot(OMEGA, [0.]*OMEGA.size, "--", color="gray")
-    phi0 = np.linspace((1.-rad0)*PHI0, (1.+rad0)*PHI0, nb)
-    phi1 = np.linspace((1.-rad1)*PHI1, (1.+rad1)*PHI1, nb)
+    phi0 = np.linspace(**a, num=nb)
+    phi1 = np.linspace(**b, num=nb)
     for n, p0 in enumerate(phi0):
         for m, p1 in enumerate(phi1):
             phi = phi0[n] + phi1[m]*OMEGA
@@ -554,50 +657,51 @@ def plot_phillips(rad0=0.5, rad1=0.9, nb=10):
             )
     ax.plot(OMEGA, PHI0 + PHI1*OMEGA, color="r")
     ax.fill_between(OMEGA, -0.2, 0.2, color="k", alpha=0.25, zorder=100)
-    ax.fill_between([0.5, 0.8], -0.3, 0.3, color="k", alpha=0.25, zorder=100)
-    ax.set_ylabel(r"$\varphi$")
-    ax.set_xlabel(r"$\omega$")
+    ax.fill_between([0.5, 0.8], -0.2, 0.2, color="k", alpha=0.25, zorder=100)
+    ax.set_ylabel(r"p=Phillips curve ($\varphi$)")
+    ax.set_xlabel(r"wage share ($\omega$)")
     plt.show()
     plt.close(fig)
 
-def plot_gammaw(rad=0.25, nb=4):
+    plot_param_aa("phi0", **a)
+    plot_param_aa("phi1", **b)
+
+def plot_param_population(rad0=0.5, rad1=0.1, nb=5):
     """
-    Plot the influence of gammaw on inflation.
+    Plot the population trajectories.
 
     Input
-        rad : float
-            radius of gammaw param \in [(1+-rad)*GAMMAW]
+        rad0 : float
+            radius of the deltanpop \in [(1+-rad0)*PHI0]
+        rad1 : float
+            radius of the npopmax \in [(1+-rad1)*PHI1]
         nb : integer
             number of lines
     """
-    GAMMAW = 0.5
-    PHI0, PHI1 = -0.292, 0.469
-    OMEGA = np.linspace(0., 1., 1000)
-    I = np.linspace(-0.5, 0.5, 1000)
-    gammaw = np.linspace((1.-rad)*GAMMAW, (1.+rad)*GAMMAW, nb)
-    OMEGA, I = np.meshgrid(OMEGA, I)
+    DELTANPOP, NPOPBAR = 0.0305, 7.056
+    a = {"start":(1.-rad0)*DELTANPOP, "stop":(1.+rad0)*DELTANPOP}
+    b = {"start":(1.-rad1)*NPOPBAR, "stop":(1.+rad1)*NPOPBAR}
+    deltanpop = np.linspace(**a, num=nb)
+    npopbar = np.linspace(**b, num=nb)
 
-    fig = plt.figure()
-    ax = plt.axes(projection="3d")
+    fig, ax = plt.subplots()
+    k = 0
+    for delta in deltanpop:
+        for npop in npopbar:
+            pop = integrate_pop(delta, npop)
+            ax.plot(pop[:,0], pop[:,1], color="k", linestyle="-")
+            print(" ", k)
+            k+=1
 
-    for gamma in gammaw:
-        ax.plot_surface(
-            X=OMEGA,
-            Y=I,
-            Z=PHI0 + PHI1*OMEGA + gamma*I,
-            cmap=cm.coolwarm
-        )
-    ax.plot_surface(
-        X=OMEGA,
-        Y=I,
-        Z=PHI0 + PHI1*OMEGA + GAMMAW*I,
-        color="grey"
-    )
-    ax.set_xlabel(r"$\omega$")
-    ax.set_ylabel(r"$i$")
-    ax.set_zlabel(r"$\phi$")
+    pop = integrate_pop(DELTANPOP, NPOPBAR)
+    ax.plot(pop[:,0], pop[:,1], color="r", linestyle="-")
+    ax.set_xlabel(r"time")
+    ax.set_ylabel(r"population ($N$)")
     plt.show()
     plt.close(fig)
+
+    plot_param_aa("delta n pop", **a)
+    plot_param_aa("n pop ax", **b)
 
 def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.pdf", show=False):
     """

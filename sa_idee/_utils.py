@@ -331,5 +331,41 @@ def extend_IDEE(lvars, data):
     data = np.hstack((data, new))
     return lvars, data
 
+def integrate_pop(deltanpop, npopbar):
+    """
+    Integrate population trajectories.
 
+    Input
+        deltanpop : float
+            growth rate
+        npopbar : float
+            upper bound of population
+    Ouput
+        sol : numpy.ndarray (float)
+            solution array
+    """
+    t0 = 2015
+    y0 = 4.83
+    dt = 1./12
+    t_bound = 3000
 
+    fun = lambda t, y: deltanpop*(1. - y/npopbar)
+
+    P = RK45(fun, t0, [y0], t_bound, first_step=dt)
+    P.t_old = P.t
+
+    N = [y0]
+    time = [t0]
+    while P.status=="running":
+        P.step()
+        interp = P.dense_output()
+
+        for t in np.arange(P.t_old, P.t, dt):
+            y = interp(t)
+
+            N.append(y[0])
+            time.append(t)
+
+    sol = np.column_stack((time, N))
+
+    return sol

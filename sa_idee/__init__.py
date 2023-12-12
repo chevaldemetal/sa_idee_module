@@ -27,5 +27,7 @@ from sa_idee._plot_func import plot_IDEE
 from sa_idee._plot_func import plot_sa_class
 from sa_idee._plot_func import plot_histo
 from sa_idee._plot_func import plot_map
-from sa_idee._plot_func import plot_phillips
-from sa_idee._plot_func import plot_gammaw
+from sa_idee._plot_func import plot_param_phillips
+from sa_idee._plot_func import plot_param_gammaw
+from sa_idee._plot_func import plot_param_adot
+from sa_idee._plot_func import plot_param_population
