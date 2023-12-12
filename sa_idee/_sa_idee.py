@@ -9,6 +9,10 @@ description: This module is can be used to run the sensitivity analysis of the m
 TODO:
 
 - negative S1
+- - faire un histogramme et enlever les valeurs aberrantes
+- - relaxation time très très grands#
+- - relaxation time très très grands
+- - compare S1 and histograms
 - - remove extreme values in outputs
 - - test the centered method https://github.com/SALib/SALib/issues/109
 - - increase the sample
@@ -772,7 +776,7 @@ def perso_savefig(fig, path, figure_name, show):
         plt.show()
     plt.close(fig)
 
-def plot_histo(c, path, n_bins=20, figure_name="histograms.pdf", show=False):
+def plot_histo(c, path, n_bins=100, figsize=(15,10), figure_name="histograms.pdf", show=False):
     """
     Plot histograms of results.
 
@@ -783,6 +787,10 @@ def plot_histo(c, path, n_bins=20, figure_name="histograms.pdf", show=False):
             path of the data
         n_bins : integer
             number of bins
+        perc : list (float)
+            percentiles for extreme values removal
+        figsize : tuple (float)
+            figure size
         figure_name : string
             file name
         show : boolean
@@ -790,17 +798,31 @@ def plot_histo(c, path, n_bins=20, figure_name="histograms.pdf", show=False):
     """
     nbrows, nbcols = 4, 4
     try:
-        s = c.results.size
+        s = c.results.shape[0]
     except AttributeError:
         print("Cannot draw histograms without results.")
         pass
                                                                          # plot histograms
-    fig, axes = plt.subplots(nbrows, nbcols)
+    fig, axes = plt.subplots(nbrows, nbcols, figsize=figsize)
     for n, out in enumerate(c["outputs"]):
         i, j = n//nbcols, n%nbcols
+        raw = c.results[:, n]
         ax = axes[i, j]
-        ax.hist(c.results[:, n], bins=n_bins)
+                                                                         # postdata process
+        std = np.nanstd(raw)
+        mean = np.nanmean(raw)
+                                                                         # plots
+        ax.hist(raw, bins=n_bins)
+        ylims = ax.get_ylim()
+        line, = ax.plot([mean-std, mean-std], [0., ylims[-1]], linestyle="--")
+        ax.plot(
+            [mean+std, mean+std],
+            [0., ylims[-1]],
+            color=line.get_color(),
+            linestyle=line.get_linestyle()
+        )
         ax.set_ylabel(out)
+        #ax.set_ylim(bottom=0.1*s)
 
     perso_savefig(fig, path, figure_name, show)
 
@@ -1258,8 +1280,14 @@ def plot_sa_class(sa_class, path, ylims=[YMIN, YMAX], figure_name="sa.pdf", show
             if True, show, else save fig
     """
     axes = sa_class.plot()
-    axes[0,0].set_yscale('log')
-    #axes[0,0].set_ylim(ylims[0], ylims[1])
+    axes[0,0].set_ylim(ylims[0], ylims[1])
+    for row in axes:
+        for col in row:
+            xlims = col.get_xlim()
+            col.plot([xlims[0], xlims[1]], [0., 0.])
+            col.plot([xlims[0], xlims[1]], [1., 1.])
+
+    #axes[0,0].set_yscale('log')
     plt.tight_layout(**PADS)
 
     fig = plt.gcf()
@@ -1295,7 +1323,7 @@ def run_IDEE(sa_class, path):
     print("\n  Mean execution of solving IDEE = {:.1e} s".format(mean_time_loop))
     print("  Total execution time = {:.1f} s".format(timer() - time_start))
 
-def run_SA(sa_class):
+def run_SA(sa_class, perc=[2, 98]):
     """
     Run the sensitivity analysis of the sa_class.
 
@@ -1306,16 +1334,33 @@ def run_SA(sa_class):
         sa_class : SALib.util.problem.ProblemSpec
             the class of the library SAlib
     """
+                                                                         # copy class
+    cc = ProblemSpec({
+        "num_vars":sa_class["num_vars"],
+        "names":sa_class["names"],
+        "bounds":sa_class["bounds"],
+        "outputs":sa_class["outputs"]
+    })
+                                                                         # get the parameters
     sorted_results = sa_class.results.copy()
     sorted_samples = sa_class.samples.copy()
+    nbrows = sorted_results.shape[0]
+                                                                         # remove extremal values
+    for j in range(sorted_results.shape[1]):
+        raw = sorted_results[:,j]
+        lims = np.percentile(raw, perc)
+        select = (raw>lims[0]) * (raw<lims[1])
+        if select.any():
+            sorted_results[~select,j] = np.nan
                                                                          # remove rows with nan
-    select_rows = ~np.isnan(sa_class.results).any(axis=1)
+    select_rows = ~np.isnan(sorted_results).any(axis=1)
+    print("  remove {:d} rows with nan".format(nbrows-np.count_nonzero(select_rows)))
     sorted_samples = sorted_samples[select_rows,:]
     sorted_results = sorted_results[select_rows,:]
                                                                          # make the good number of rows
     nb_rows = sorted_results.shape[0]
-    Nrem = nb_rows%(2*sa_class["num_vars"]+2)
-    print("  {:d} samples to remove".format(Nrem))
+    Nrem = nb_rows%(2*cc["num_vars"]+2)
+    print("  {:d} other samples to remove".format(Nrem))
     del_list = np.random.randint(low=0, high=nb_rows-1, size=Nrem)
     select_rows = [True]*nb_rows
     for i in del_list:
@@ -1326,16 +1371,17 @@ def run_SA(sa_class):
     #noise = 1.E-15*np.random.randint(10, size=sorted_results.shape)
     #sorted_results += noise
                                                                          # update the class
-    sa_class.set_samples(sorted_samples)
-    sa_class.set_results(sorted_results)
-    sa_class = comp_nb_samples(sa_class)
+    cc.set_samples(sorted_samples)
+    cc.set_results(sorted_results)
+    cc = comp_nb_samples(cc)
+    cc["bad_array"] = np.zeros(cc["nb_samples"], dtype=np.bool8)
                                                                          # run the SA
     SA_time_start = timer()
-    sa_class.analyze_sobol()
+    cc.analyze_sobol()
     SA_time = timer() - SA_time_start
     print("  Execution time of Sensitivity Analysis = {:.1e} s".format(SA_time))
 
-    return sa_class
+    return cc
 
 def save_sa_class(sa_class, path):
     """
@@ -1471,7 +1517,7 @@ def sort_attractors(sa_class):
         results = sa_class.results
     except AttributeError:
         print("Cannot find outputs, ignoring them.")
-        results = np.zeros((samples.size, sa_class["nul_vars"]), dtype=np.bool8)
+        results = np.zeros((samples.size, sa_class["num_vars"]), dtype=np.bool8)
 
     bad_r, good_r = [], []
     bad_s, good_s = [], []
@@ -1492,6 +1538,7 @@ def sort_attractors(sa_class):
         bad_class.set_samples(bad_s)
         bad_class.set_results(bad_r)
         bad_class = comp_nb_samples(bad_class)
+        bad_class["bad_array"] = np.ones(bad_class["nb_samples"], dtype=np.bool8)
     else:
         print("  there is no bad samples")
         bad_class = None
@@ -1500,6 +1547,7 @@ def sort_attractors(sa_class):
         good_class.set_samples(good_s)
         good_class.set_results(good_r)
         good_class = comp_nb_samples(good_class)
+        good_class["bad_array"] = np.zeros(good_class["nb_samples"], dtype=np.bool8)
     else:
         print("  there is no good samples")
         good_class = None
