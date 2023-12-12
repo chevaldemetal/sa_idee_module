@@ -1,0 +1,133 @@
+! Workforce
+phi0=-0.292 ! Constant of the short-term Philips curve
+phi1=0.469 ! Slope of the short-term Philips curve
+wage_type=1 ! 0 as Coping 2020, 1 with gammaw*i
+gammaw=0.5 ! factor in wage equation
+prod_type=1 ! Type of alpha in productivity
+kaldor_verdoorn=0.5 ! g factor in: dot a / a = alpha + kv g
+alpha=0.003 ! constant growth rate of productivity
+alphamin=-0.02 !
+
+! Workforce growth
+pop_type=0 ! type of population growth (0, converges to npopbar, 1, third order poly)
+deltanpop=0.0305 ! leading growth rate of workforce
+npopbar=7.056 ! maximum population in the logistic evolution
+pop2=0.000001464
+pop1=-0.009025626
+pop0=18.539646684
+
+! Capital
+capital_type=1 ! 0, like Bovari 2020, 1, with Kb
+delta=0.04 ! capital depreciation rate
+nu=3.0 ! Constant capital-to-output ratio
+nu_scale=1. ! scaling of nu in investments
+k_scale=0.0045 ! scaling in capital exponential term Gamma(d)
+
+! Dividends
+div0=0.051 ! Constant of the dividend function
+div1=0.4729 ! Slope of the dividend function
+divmin=0. ! Minimum of the dividend function
+divmax=0.3 ! Maximum of the dividend function; last value 1.
+
+! Investment
+inv_type=1 ! 0, like Bovari2020, 1 with d/nu
+kappa0=0.0397 ! Constant of the investment function
+kappa1=0.719 ! Slope of the investment function
+kappamax=0.3 ! Maximum of the investment function
+kappamin=0. ! Minimum of the investment function
+
+! Inflation
+infla_type=1 ! 0 constant, 1 as Bovari 2020
+eta=0.192 ! relaxation parameter of inflation
+markup_type=1 ! 0 exogenous (constant), 1 endogenous
+mu=1.75 ! markup of prices over the average cost
+omitted=0. ! offset for the production cost in the inflation
+istar=0.02 ! inflation rate targeted by the monetary policy
+
+! Interest rate
+phitaylor=0.5 ! param characterizing the reactivity of the monetary policy
+etar=10. ! relaxation parameter of the interest rate
+rstar=0.01 ! Long-term interest rate target of the economy
+          ! This is also the rate value if constant
+srep=0.1 ! Fraction of the outstanding debt repaid yearly
+fg=1.05 ! Coefficient of forgiveness
+
+! Abatement and control prices
+theta=3.4 ! parameter of the abatement cost function
+deltapbs=-0.0026 !-0.005 ! Exo growth rate of the back-stop technology price
+pbs_c=0.5 ! coeff in pbs equation
+pbs_type=1 ! Type of pbs equation
+
+! Carbon price
+apc=0.125 ! carbon price parameter
+bpc=0.625 ! carbon price parameter
+
+! public - private sector
+sa=0.3 ! Fraction of abatement costs that are subsidized
+
+! leverage
+lev_type=0
+cr0=0.17 ! Constant of the leverage function
+crlev=1. !0.4 ! slope of the leverage function
+
+! Climate damages
+pi1=0. ! damage function parameter
+pi2=0.00236 ! damage function parameter
+pi3=0.0000819 ! damage function parameter
+tempcoeff=1. ! coefficient in front of temperature anomaly in damage function
+zeta3=6.754 ! damage function parameter
+fdamk=1./3 ! (paper = 1./3) fraction of environmental damage allocated
+          !  to the stock of capital
+dam_type=1 !  by default, 1: no damage
+          !              2: medium damage
+          !              3: high damage
+
+! CO2 emissions
+sigma_type=1 ! Type of sigma equation
+delta_eland=-0.022 ! Growth rate of land-use change CO2 of emissions
+deltagsigma=-0.0175 ! dynamics of emissivity
+sigma_c=0.2 ! coeff in sigma equation
+
+! Climate constants for climate module
+climate_sens=3.1 ! Climate sensitivity
+gammastar=0.0176 ! Heat exchange coefficient between temperature layers
+f2co2=3.681 ! Change in radiative forcing resulting from doubling of CO2
+cat_pind=588. ! CO2 preind conc in atmosphere
+cup_pind=360. ! CO2 preind conc in upper layer of ocean and biosphere
+clo_pind=1720. ! CO2 preindustrial concentration in bottom layer of the ocean
+fexo0=0. ! Initial value of the exogenous radiative forcing
+fexo1=0. ! value of the exogenous radiative forcing in 2100
+phi12=0.024 ! Transfer coef for carbon from the atmo to the upper ocean
+phi23=0.001 ! Transfer coef for carbon from the upper ocean/biosphere
+           !  to the lower ocean
+heat_cap_at=1/.098 ! Heat capacity of the atmo biosphere and
+                  ! upper ocean
+heat_cap_lo=3.52 ! Heat capacity of the deeper ocean
+
+! Initial conditions, values with * are equal as in the code R
+y_ini=59.7387 !
+npop_ini=4.83 !
+lambda_ini=0.675 !
+omega_ini=0.578 !
+d_ini=1.53 !
+eland_ini=2.6 !
+eind_ini=51.79 ! 35.85 est la valeur dans Bovari 2020
+n_ini=0.03 !
+gsigma_ini=-0.0152 !
+pbs_ini=1500.0 !547.22 !
+rb_ini=0.01 !
+i_ini=0.018 ! initial inflation in 2015
+price_ini=1.
+
+co2at_ini=851. !
+co2up_ini=460. !
+co2lo_ini=1740. !
+temp_ini=1.07 !
+temp0_ini=0.0068 !
+
+! initial time
+t_ini=2015. !
+
+! Numerical parameters
+dt=1./360 !
+tmax=2100. !
