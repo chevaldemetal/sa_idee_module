@@ -349,13 +349,17 @@ def run_IDEE(sa_class, path):
     print("\n  Mean execution of solving IDEE = {:.1e} s".format(mean_time_loop))
     print("  Total execution time = {:.1f} s".format(timer() - time_start))
 
-def run_SA(sa_class, perc=[2, 98]):
+def run_SA(sa_class, perc=[2, 98], rm_ex=True):
     """
     Run the sensitivity analysis of the sa_class.
 
     Input
         sa_class : SALib.util.problem.ProblemSpec
             the class of the library SAlib
+        perc : list (float)
+            percentiles of extremal values
+        rm_ex : boolean
+            if True, remove extremal values
     Output
         sa_class : SALib.util.problem.ProblemSpec
             the class of the library SAlib
@@ -372,12 +376,13 @@ def run_SA(sa_class, perc=[2, 98]):
     sorted_samples = sa_class.samples.copy()
     nbrows = sorted_results.shape[0]
                                                                          # remove extremal values
-    for j in range(sorted_results.shape[1]):
-        raw = sorted_results[:,j]
-        lims = np.percentile(raw, perc)
-        select = (raw>lims[0]) * (raw<lims[1])
-        if select.any():
-            sorted_results[~select,j] = np.nan
+    if rm_ex:
+        for j in range(sorted_results.shape[1]):
+            raw = sorted_results[:,j]
+            lims = np.percentile(raw, perc)
+            select = (raw>lims[0]) * (raw<lims[1])
+            if select.any():
+                sorted_results[~select,j] = np.nan
                                                                          # remove rows with nan
     select_rows = ~np.isnan(sorted_results).any(axis=1)
     print("  remove {:d} rows with nan".format(nbrows-np.count_nonzero(select_rows)))

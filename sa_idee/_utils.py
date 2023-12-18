@@ -349,7 +349,7 @@ def integrate_pop(deltanpop, npopbar):
     dt = 1./12
     t_bound = 3000
 
-    fun = lambda t, y: deltanpop*(1. - y/npopbar)
+    fun = lambda t, y: y*deltanpop*(1. - y/npopbar)
 
     P = RK45(fun, t0, [y0], t_bound, first_step=dt)
     P.t_old = P.t

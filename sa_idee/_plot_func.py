@@ -9,6 +9,31 @@ description: plot funcitons
                                                                          # --- imports ----------------------
 from sa_idee._libs import *
 from sa_idee._utils import *
+                                                                         # --- macros -----------------------
+T0, T1 = 50., 200
+GAMMAW = 0.5
+PHI0, PHI1 = -0.292, 0.469
+DELTA, NU = 0.04, 3.
+ALPHAC, KVC = 0.01, 0.5
+DIV0, DIV1 = 0.03, 0.4729
+K_SCALE = 0.0045
+MU, ETA = 1.7, 0.2
+POW = 1./8
+KAPPA0, KAPPA1 = 0.0397, 0.719
+DELTANPOP, NPOPBAR = 0.0305, 7.056
+RB0 = 0.01
+
+PHITAYLOR = 0.5
+ETAR = 3.
+ISTAR = 0.02
+RSTAR = 0.01
+
+Im, Ia = 2.5, 5.5
+Gm, Ga = 2., 5.
+PIm, PIa = 21., 10.
+LAMm, LAMa = 67.5, 8.
+KAPPAm, KAPPAa = 15., 12.
+OMEGAm, OMEGAa = 65., 7.5
                                                                          # --- functions --------------------
 def perso_savefig(fig, path, figure_name, show):
     """
@@ -524,19 +549,28 @@ def plot_map(badc, goodc, path, figure_name="map.pdf", show=False):
 
     return True
 
-def plot_param_aa(name, start, stop):
+def plot_param_aa(name, dval, start, stop):
     """
     Plot bounds
 
     Input
+        name : string
+            variable name
+        dval : float
+            default value
         start : float
             inf bound
         stop : float
             sup bound
     """
-    print("{}: ({:.6f}, {:.6f})".format(name, start, stop))
+    print("{}: {:.6f} ({:.6f}, {:.6f})".format(
+        name,
+        dval,
+        min(start, stop),
+        max(start, stop)
+    ))
 
-def plot_param_adot(radalpha=2.5, radkv=0.75, nb=5):
+def plot_param_adot(radalpha=0.125, radkv=0.125, c=0.02, win=0.01, nb=5):
     """
     Plot the productivity growth.
 
@@ -545,45 +579,392 @@ def plot_param_adot(radalpha=2.5, radkv=0.75, nb=5):
             the radius of alpha
         radkv : float
             the radius of the KV coefficient
+        c : float
+            central value where to mean
+        win : float
+            window width
         nb : integer
             number of lines
     """
-    ALPHAC, KVC = 0.003, 0.5
-
     b_a = {"start":(1.-radalpha)*ALPHAC, "stop":(1.+radalpha)*ALPHAC}
     b_k = {"start":(1.-radkv)*KVC, "stop":(1.+radkv)*KVC}
 
-    ALPHA = np.linspace(**b_a, num=nb)
-    KV = np.linspace(**b_k, num=nb)
-    G = np.linspace(-0.2, 0.2, 1000)
+    alphal = np.linspace(**b_a, num=nb)
+    kvl = np.linspace(**b_k, num=nb)
 
-    fig, ax = plt.subplots()
-    ax.plot(G, [0.]*G.size, linestyle="--", color="gray")
-    for alpha in ALPHA:
-        for kv in KV:
-            ax.plot(
-                G,
-                alpha + kv*G,
+    t = np.linspace(0., 1000, 1000)
+    g = (Gm + Ga * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    select = (g>(c-win)) * (g<(c+win))
+
+    fig, axes = plt.subplots(nrows=3)
+    axes[2].plot(t, g)
+
+    means = []
+    for alpha in alphal:
+        for kv in kvl:
+            dat = alpha + kv*g
+            axes[0].plot(
+                g,
+                dat,
                 color="k",
                 linestyle="-",
             )
-    ax.plot(
-        G,
-        ALPHAC + KVC*G,
+            axes[1].plot(
+                t,
+                dat,
+                color="k",
+                linestyle="-",
+            )
+            means.append(np.mean(dat[select]))
+
+    dat = ALPHAC + KVC*g
+    axes[0].plot(
+        g,
+        ALPHAC + KVC*g,
         color="r",
         linestyle="-"
     )
-    ax.fill_between(G, -0.05, 0.05, color="k", alpha=0.25, zorder=100)
-    ax.fill_between([-0.05, 0.05], -0.05, 0.05, color="k", alpha=0.25, zorder=100)
-    ax.set_xlabel(r"growth rate ($g$)")
-    ax.set_ylabel(r"growth rate of wages ($\dot{a}/a$)")
+    axes[1].plot(
+        t,
+        ALPHAC + KVC*g,
+        color="r",
+        linestyle="-"
+    )
+    tip_val = np.mean(dat[select])
+
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([c-win, c+win], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    axes[0].set_xlabel(r"growth rate ($g$)")
+    axes[0].set_ylabel(r"productivity growth ($\dot{a}/a$)")
+    axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel(r"productivity growth ($\dot{a}/a$)")
+    axes[2].set_ylabel(r"growth rate ($g$)")
+    axes[2].set_xlabel(r"time ($t$)")
+
+    for ax in axes[:-1]:
+        ax.plot(
+            list(ax.get_xlim()),
+            [0., 0.],
+            color="gray",
+            linestyle="--"
+        )
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("alpha", ALPHAC, **b_a)
+    plot_param_aa("kaldoor-verdon", KVC, **b_k)
+
     plt.show()
     plt.close(fig)
 
-    plot_param_aa("alpha", **b_a)
-    plot_param_aa("kaldoor-verdon", **b_k)
+def plot_param_all():
+    """
+    Plot all param functions.
+    """
+    print("\n  Productivity growth")
+    plot_param_adot()
+    print("\n  Central Bank interest rate")
+    plot_param_CB_interest_rate()
+    print("\n  Delta nu")
+    plot_param_deltanu()
+    print("\n  Dividends")
+    plot_param_dividends()
+    print("\n  Gamma")
+    plot_param_Gamma()
+    print("\n  Gammaw")
+    plot_param_gammaw()
+    print("\n  Inflation")
+    plot_param_inflation()
+    print("\n  Investment")
+    plot_param_investment()
+    print("\n  Phillips")
+    plot_param_phillips()
+    print("\n  Population")
+    plot_param_population()
 
-def plot_param_gammaw(rad=1., nb=5):
+def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=0.02, win0=0.01, c1=62.25, win1=5, nb0=5, nb1=5):
+    """
+    plot central bank interest rate
+
+    Input
+    """
+    a = {"start":(1.-rad0)*PHITAYLOR, "stop":(1.+rad0)*PHITAYLOR}
+    b = {"start":(1.-rad1)*ISTAR, "stop":(1.+rad1)*ISTAR}
+    cc = {"start":(1.-rad2)*RSTAR, "stop":(1.+rad2)*RSTAR}
+    d = {"start":(1.-rad3)*ETAR, "stop":(1.+rad3)*ETAR}
+    dt = 1.
+
+    phil = np.linspace(**a, num=nb0)
+    istarl = np.linspace(**b, num=nb0)
+    rstarl = np.linspace(**cc, num=nb0)
+    etarl = np.linspace(**d, num=nb1)
+
+    t = np.linspace(0., 1000, 4000)
+    select1 = (t>(c1-win1)) * (t<(c1+win1))
+    i = (Im + Ia * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    select0 = (i>(c0-win0)) * (i<(c0+win0))
+
+    fig, axes = plt.subplots(nrows=3)
+    axes[2].plot(t, i)
+
+    means0 = []
+    means1 = []
+    for phi in phil:
+        for istar in istarl:
+            for rstar in rstarl:
+                rcb = np.maximum(0., rstar + i + phi*(i - istar))
+                axes[0].plot(i, rcb, color="k", linestyle="-")
+                axes[1].plot(t, rcb, color="k", linestyle="-")
+                means0.append(np.mean(rcb[select0]))
+    
+    rcb = np.maximum(0., RSTAR + i + PHITAYLOR*(i - ISTAR))
+    tmaxrcb = t[np.argmax(rcb[select1])]
+    axes[0].plot(i, rcb, color="r", linestyle="-")
+    axes[1].plot(t, rcb, color="r", linestyle="-")
+    for etar in etarl:
+        rb = np.zeros(t.size)
+        rb[0] = RB0
+        for n, tt in enumerate(t[:-1]):
+                                                                         # time step is one year here
+            rb[n+1] = rb[n] + dt/etar * (rcb[n] - rb[n])
+        axes[1].plot(t, rb, color="gray", linestyle="-", alpha=0.5)
+        means1.append(
+            abs(tmaxrcb - t[np.argmax(rb[select1])])
+        )
+
+    for n, tt in enumerate(t[:-1]):
+        rb[n+1] = rb[n] + dt/ETAR * (rcb[n] - rb[n])
+    axes[1].plot(t, rb, color="r", linestyle="--")
+    tip_val0 = np.mean(rcb[select0])
+    tip_val1 = abs(tmaxrcb - t[np.argmax(rb[select1])])
+
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([(c0-win0), (c0+win0)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    ylims = axes[1].get_ylim()
+    axes[1].fill_between([(c1-win1), (c1+win1)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel(r"inflation ($i$)")
+    axes[0].set_ylabel(r"central bank interest rate ($r_{cb}$)")
+    axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel(r"central bank interest rate ($r_{cb}$)")
+    axes[2].set_ylabel(r"inflation ($i$)")
+    axes[2].set_xlabel(r"time ($t$)")
+
+    print("\nwindow size = {:.1f} %".format((np.max(means0)-np.min(means0))/tip_val0*100))
+    plot_param_aa("phistar", PHITAYLOR, **a)
+    plot_param_aa("istar", ISTAR, **b)
+    plot_param_aa("rstar", RSTAR, **cc)
+
+    print("\nwindow size = {:.1f} %".format((np.max(means1)-np.min(means1))/tip_val1*100))
+    plot_param_aa("etar", ETAR, **d)
+
+    plt.show()
+    plt.close(fig)
+
+def plot_param_deltanu(rad0=0.025, rad1=0.03, c=0.15, win=0.01, nb=5):
+    """
+    Plot delta and nu parameters.
+
+    Input
+        rad0: float
+        rad1 : float
+    """
+
+    a = {"start":(1.-rad0)*DELTA, "stop":(1.+rad0)*DELTA}
+    b = {"start":(1.-rad1)*NU, "stop":(1.+rad1)*NU}
+
+    deltal = np.linspace(**a, num=nb)
+    nul = np.linspace(**b, num=nb)
+
+    t = np.linspace(0., 1000, 1000)
+    kappa = (KAPPAm + KAPPAa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    select = (kappa>(c-win)) * (kappa<(c+win))
+
+    fig, axes = plt.subplots(nrows=3)
+    axes[2].plot(t, kappa)
+
+    means = []
+    for delta in deltal:
+        for nu in nul:
+            g = kappa / nu - delta
+            axes[0].plot(
+                kappa,
+                g,
+                linestyle="-",
+                color="k"
+            )
+            axes[1].plot(
+                t,
+                g,
+                linestyle="-",
+                color="k"
+            )
+            means.append(np.mean(g[select]))
+    g = kappa / NU - DELTA
+    axes[0].plot(
+        kappa,
+        g,
+        linestyle="-",
+        color="r"
+    )
+    axes[1].plot(
+        t,
+        g,
+        linestyle="-",
+        color="r"
+    )
+    tip_val = np.mean(g[select])
+
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel(r"investment ratio (\kappa$)")
+    axes[0].set_ylabel(r"growth rate ($g$)")
+    axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel(r"growth rate ($g$)")
+    axes[2].set_ylabel(r"investment ratio ($\kappa$)")
+    axes[2].set_xlabel(r"time ($t$)")
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("delta", DELTA, **a)
+    plot_param_aa("nu", NU, **b)
+
+    plt.show()
+    plt.close(fig)
+
+def plot_param_dividends(rad0=0.25, rad1=0.25, c=0.07, win=0.01, nb=5):
+    """
+    Plot dividend functions
+
+    Input
+        rad0 : float
+            radius of const param
+        rad1 : float
+            radius of slope param
+        nb : integer
+            number of points
+    """
+    MAXB, MAXT = 0.1, 0.3
+
+    a = {"start":(1.-rad0)*DIV0, "stop":(1.+rad0)*DIV0}
+    b = {"start":(1.-rad1)*DIV1, "stop":(1.+rad1)*DIV1}
+
+    div0l = np.linspace(**a, num=nb)
+    div1l = np.linspace(**b, num=nb)
+
+    t = np.linspace(0., 1000, 1000)
+    smallpik = (PIm + PIa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100/NU
+    select = (smallpik>(c-win)) * (smallpik<(c+win))
+
+    fig, axes = plt.subplots(nrows=3)
+    axes[2].plot(t, NU*smallpik)
+
+    means = []
+    for div0 in div0l:
+        for div1 in div1l:
+            div = np.clip(
+                div0 + div1*smallpik,
+                0.,
+                0.3
+            )*NU
+            axes[0].plot(
+                smallpik*NU,
+                div,
+                linestyle="-",
+                color="k"
+            )
+            axes[1].plot(
+                t,
+                div,
+                linestyle="-",
+                color="k"
+            )
+            means.append(np.mean(div[select]))
+    div = np.clip(
+        DIV0 + DIV1*smallpik,
+        0.,
+        0.3
+    )*NU
+    axes[0].plot(
+        smallpik*NU,
+        div,
+        linestyle="-",
+        color="r"
+    )
+    axes[1].plot(
+        t,
+        div,
+        linestyle="-",
+        color="r"
+    )
+    tip_val = np.mean(div[select])
+
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([(c-win)*NU, (c+win)*NU], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel(r"profit to GDP ($\Pi/pY$)")
+    axes[0].set_ylabel(r"dividends rate (to GDP) ($\Delta$)")
+    axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel(r"dividends rate (to GDP) ($\Delta$)")
+    axes[2].set_ylabel(r"profit to GDP ($\Pi/pY$)")
+    axes[2].set_xlabel(r"time ($t$)")
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("div0", DIV0, **a)
+    plot_param_aa("div1", DIV1, **b)
+
+    plt.show()
+    plt.close(fig)
+
+def plot_param_Gamma(rad=0.255, c=2.8, win=0.1, nb=5):
+    """
+    Plot te Gamma function.
+
+    Input
+        rad : float
+            radius of k_scale \in [(1+-rad)*K_SCALE]
+    """
+    b = {"start":max(K_SCALE/4, (1.-rad)*K_SCALE), "stop":(1.+rad)*K_SCALE}
+
+    ks_list = np.linspace(**b, num=nb)
+    tcdebtratio = np.linspace(0., 0.99999*NU, 500)
+    select = (tcdebtratio>(c-win)) * (tcdebtratio<(c+win))
+
+    fig, ax = plt.subplots()
+    means = []
+    for k_scale in ks_list:
+        gammad = 1. - np.exp(
+            -k_scale*(tcdebtratio**2)/(NU**2 - tcdebtratio**2)
+        )
+        ax.plot(
+            tcdebtratio,
+            gammad,
+            linestyle="-",
+            color="k"
+        )
+        means.append(np.mean(gammad[select]))
+    gammad = 1. - np.exp(
+        -K_SCALE*(tcdebtratio**2)/(NU**2 - tcdebtratio**2)
+    )
+    ax.plot(
+        tcdebtratio,
+        gammad,
+        linestyle="-",
+        color="r"
+    )
+    tip_val = np.mean(gammad[select])
+
+    ylims = ax.get_ylim()
+    ax.fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    ax.set_xlabel(r"debt ratio to capital ($D/pK$)")
+    ax.set_ylabel(r"Gamma function ($\Gamma$)")
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("k_scale", K_SCALE, **b)
+
+    plt.show()
+    plt.close(fig)
+
+def plot_param_gammaw(rad=0.65, c=0.675, win=0.02, nb=5):
     """
     Plot the influence of gammaw on inflation.
 
@@ -593,38 +974,253 @@ def plot_param_gammaw(rad=1., nb=5):
         nb : integer
             number of lines
     """
-    GAMMAW = 0.5
-    PHI0, PHI1 = -0.292, 0.469
-    OMEGA = np.linspace(0.5, 0.7, 100)
-    I = np.linspace(-0.05, 0.05, 100)
+    lams = np.linspace(0.5, 0.7, 100)
+
+    t = np.linspace(0., 1000, 1000)
+    lams = (LAMm + LAMa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    select = (lams>(c-win)) * (lams<(c+win))
+
+    I = np.linspace(-0.05, 0.05, 7)
     b_a = {"start":(1.-rad)*GAMMAW, "stop":(1.+rad)*GAMMAW}
     gammaw = np.linspace(**b_a, num=nb)
-    OMEGA, I = np.meshgrid(OMEGA, I)
 
-    fig = plt.figure()
-    ax = plt.axes(projection="3d")
-    for gamma in gammaw:
-        ax.plot_surface(
-            X=OMEGA,
-            Y=I,
-            Z=PHI0 + PHI1*OMEGA + gamma*I,
-            cmap=cm.coolwarm
+    fig, axes = plt.subplots(nrows=3)
+    axes[2].plot(t, lams)
+
+    means = []
+    for n, i in enumerate(I):
+        for gamma in gammaw:
+            dat = PHI0 + PHI1*lams + gamma*i
+            axes[0].plot(
+                lams,
+                dat,
+                linestyle="-",
+                color="k"
+            )
+            axes[1].plot(
+                t,
+                dat,
+                linestyle="-",
+                color="k"
+            )
+            if n==I.size-1:
+                means.append(np.mean(dat[select]))
+        axes[0].plot(
+            lams,
+            PHI0 + PHI1*lams + GAMMAW*i,
+            linestyle="-",
+            color="r"
         )
-    ax.plot_surface(
-        X=OMEGA,
-        Y=I,
-        Z=PHI0 + PHI1*OMEGA + GAMMAW*I,
-        color="grey"
-    )
-    ax.set_xlabel(r"wage share ($\omega$)")
-    ax.set_ylabel(r"inflation ($i$)")
-    ax.set_zlabel(r"Phillips curve ($\varphi$)")
+        axes[1].plot(
+            t,
+            PHI0 + PHI1*lams + GAMMAW*i,
+            linestyle="-",
+            color="r"
+        )
+        if n==I.size-1:
+            tip_val = np.mean(dat[select])
+           
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel(r"employment ($\lambda$)")
+    axes[0].set_ylabel(r"Phillips curve ($\varphi$)")
+    axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel(r"Phillips curve ($\varphi$)")
+    axes[2].set_ylabel(r"employment ($\lambda$)")
+    axes[2].set_xlabel(r"time ($t$)")
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("gammaw", GAMMAW, **b_a)
+
     plt.show()
     plt.close(fig)
 
-    plot_param_aa("gammaw", **b_a)
+def plot_param_inflation(rad0=0.015, rad1=0.1, c=0.65, win=0.02, nb=5):
+    """
+    plot inflation depending on eta and mu
+    """
+    t = np.linspace(0., 1000, 1000)
+    omega = (OMEGAm + OMEGAa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    select = (omega>(c-win)) * (omega<(c+win))
 
-def plot_param_phillips(rad0=0.5, rad1=0.325, nb=5):
+    a = {"start":(1.-rad0)*MU, "stop":(1.+rad0)*MU}
+    b = {"start":(1.-rad1)*ETA, "stop":(1.+rad1)*ETA}
+
+    mul = np.linspace(**a, num=nb)
+    etal = np.linspace(**b, num=nb)
+
+    fig, axes = plt.subplots(nrows=3)
+    axes[2].plot(
+        t,
+        omega,
+        linestyle="-",
+        color="k"
+    )
+    means = []
+    for mu in mul:
+        for eta in etal:
+            i = eta * ( mu * omega - 1.)
+            axes[0].plot(
+                omega,
+                i,
+                linestyle="-",
+                color="k"
+            )
+            axes[1].plot(
+                t, #omega,
+                i,
+                linestyle="-",
+                color="k"
+            )
+            means.append(np.mean(i[select]))
+
+    i = ETA * ( MU * omega - 1.)
+    axes[0].plot(
+        omega,
+        i,
+        linestyle="-",
+        color="r"
+    )
+    axes[1].plot(
+        t, #omega,
+        i,
+        linestyle="-",
+        color="r"
+    )
+    tip_val = np.mean(i[select])
+ 
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel(r"wage share ($\omega$)")
+    axes[0].set_ylabel(r"inflation ($i$)")
+    axes[1].set_ylabel(r"inflation ($i$)")
+    axes[1].set_xlabel(r"time ($t$)")
+    axes[2].set_ylabel(r"wage share ($\omega$)")
+    axes[2].set_xlabel(r"time ($t$)")
+    for ax in axes[:-1]:
+        ax.plot(
+            list(ax.get_xlim()),
+            [0., 0.],
+            color="gray",
+            linestyle="--"
+        )
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("mu", MU, **a)
+    plot_param_aa("eta", ETA, **b)
+
+    plt.show()
+    plt.close(fig)
+
+def plot_param_investment(rad0=0.25, rad1=0.25, c=0.21, win=0.025, nb=5):
+    """
+    Plot investment functions
+
+    Input
+        rad0 : float
+            radius of const param
+        rad1 : float
+            radius of slope param
+        nb : integer
+            number of points
+    """
+    KAPPAMIN, KAPPAMAX = 0., 0.3
+    MAXB, MAXT = 0.1, 0.3
+
+    a = {"start":(1.-rad0)*KAPPA0, "stop":(1.+rad0)*KAPPA0}
+    b = {"start":(1.-rad1)*KAPPA1, "stop":(1.+rad1)*KAPPA1}
+
+    kappa0l = np.linspace(**a, num=nb)
+    kappa1l = np.linspace(**b, num=nb)
+
+    tcdebtratio = np.linspace(0., 1.05*NU, 1000)
+    t = np.linspace(0., 1000, 1000)
+    smallpi = (PIm + PIa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    select = (smallpi>(c-win)) * (smallpi<(c+win))
+
+    fig, axes = plt.subplots(nrows=5)
+    axes[2].plot(t, [0.]*t.size, color="gray", linestyle="--")
+    axes[3].plot(t, smallpi)
+    axes[4].plot(t, tcdebtratio/NU*100)
+    axes[4].plot([t[0], t[-1]], [100., 100.])
+
+    means = []
+    for kappa0 in kappa0l:
+        for kappa1 in kappa1l:
+
+            kappapi = kappa0 + kappa1*smallpi
+            tmp = np.maximum(0., 1. - tcdebtratio/NU)
+            kappapi = kappapi*(tmp)**POW
+            kappapi = np.clip(kappapi, KAPPAMIN, KAPPAMAX)
+
+            axes[0].plot(
+                smallpi,
+                kappapi,
+                color="k",
+                linestyle="-",
+            )
+            axes[1].plot(
+                t,
+                kappapi,
+                color="k",
+                linestyle="-",
+            )
+            axes[2].plot(
+                t,
+                kappapi/NU - DELTA,
+                color="k",
+                linestyle="-",
+            )
+            means.append(np.mean(kappapi[select]))
+
+    kappapi = KAPPA0 + KAPPA1*smallpi
+    tmp = np.maximum(0., 1. - tcdebtratio/NU)
+    kappapi = kappapi*(tmp)**POW
+    kappapi = np.clip(kappapi, KAPPAMIN, KAPPAMAX)
+    axes[0].plot(
+        smallpi,
+        kappapi,
+        color="r",
+        linestyle="-",
+    )    
+    axes[1].plot(
+        t,
+        kappapi,
+        color="r",
+        linestyle="-",
+    )    
+    axes[2].plot(
+        t,
+        kappapi/NU - DELTA,
+        color="r",
+        linestyle="-",
+    )    
+    tip_val = np.mean(kappapi[select])
+
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel(r"profit to GDP ($\pi$)")
+    axes[0].set_ylabel(r"investment rate (to GDP) ($\kappa$)")
+    axes[1].set_xlabel(r"time $t$)")
+    axes[1].set_ylabel(r"investment rate (to GDP) ($\kappa$)")
+    axes[2].set_xlabel(r"time $t$)")
+    axes[2].set_ylabel(r"growth rate ($g$)")
+    axes[3].set_ylabel(r"profit to GDP ($\pi$)")
+    axes[3].set_xlabel(r"time ($t$)")
+    axes[4].set_ylabel(r"debta ratio to capital ($d/\nu$)")
+    axes[4].set_xlabel(r"time ($t$)")
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("kappa0", KAPPA0, **a)
+    plot_param_aa("kappa1", KAPPA1, **b)
+
+    plt.show()
+    plt.close(fig)
+
+def plot_param_phillips(rad0=0.004, rad1=0.02, c=0.675, win=0.02, nb=5):
     """
     Plot the phillips curve.
 
@@ -636,37 +1232,77 @@ def plot_param_phillips(rad0=0.5, rad1=0.325, nb=5):
         nb : integer
             number of lines
     """
-    OMEGA = np.linspace(0., 1., 1000)
-    PHI0, PHI1 = -0.292, 0.469
+    t = np.linspace(0., 1000, 1000)
+    lams = (LAMm + LAMa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    select = (lams>(c-win)) * (lams<(c+win))
 
     a = {"start":(1.-rad0)*PHI0, "stop":(1.+rad0)*PHI0}
-    b = {"start":(1.-rad1)*PHI1, "stop":(1.+rad1)*PHI1}
+    b = {"start":max(0., (1.-rad1)*PHI1), "stop":(1.+rad1)*PHI1}
 
-    fig, ax = plt.subplots()
-    ax.plot(OMEGA, [0.]*OMEGA.size, "--", color="gray")
+    fig, axes = plt.subplots(nrows=3)
+    axes[2].plot(
+        t,
+        lams
+    )
+
     phi0 = np.linspace(**a, num=nb)
     phi1 = np.linspace(**b, num=nb)
+    means = []
     for n, p0 in enumerate(phi0):
         for m, p1 in enumerate(phi1):
-            phi = phi0[n] + phi1[m]*OMEGA
-            ax.plot(
-                OMEGA,
+            phi = phi0[n] + phi1[m]*lams
+            axes[0].plot(
+                lams,
                 phi,
                 color="k",
                 linestyle="-",
             )
-    ax.plot(OMEGA, PHI0 + PHI1*OMEGA, color="r")
-    ax.fill_between(OMEGA, -0.2, 0.2, color="k", alpha=0.25, zorder=100)
-    ax.fill_between([0.5, 0.8], -0.2, 0.2, color="k", alpha=0.25, zorder=100)
-    ax.set_ylabel(r"p=Phillips curve ($\varphi$)")
-    ax.set_xlabel(r"wage share ($\omega$)")
+            axes[1].plot(
+                t,
+                phi,
+                color="k",
+                linestyle="-",
+            )
+            means.append(np.mean(phi[select]))
+    axes[0].plot(
+        lams,
+        PHI0 + PHI1*lams,
+        color="r"
+    )
+    axes[1].plot(
+        t,
+        PHI0 + PHI1*lams,
+        color="r",
+        linestyle="-",
+    )
+    tip_val = np.mean(phi[select])
+
+    axes[0].set_ylabel(r"Phillips curve ($\varphi$)")
+    axes[0].set_xlabel(r"employment ($\lambda$)")
+    axes[1].set_ylabel(r"Phillips curve ($\varphi$)")
+    axes[1].set_xlabel(r"time ($t$)")
+    axes[2].set_xlabel(r" (time $t$)")
+    axes[2].set_ylabel(r"employment ($\lambda$)")
+
+    for ax in axes[:-1]:
+        ax.plot(
+            list(ax.get_xlim()),
+            [0., 0.],
+            color="gray",
+            linestyle="--"
+        )
+
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("phi0", PHI0, **a)
+    plot_param_aa("phi1", PHI1, **b)
+
     plt.show()
     plt.close(fig)
 
-    plot_param_aa("phi0", **a)
-    plot_param_aa("phi1", **b)
-
-def plot_param_population(rad0=0.5, rad1=0.1, nb=5):
+def plot_param_population(rad0=0.5, rad1=0.05, c=2100, win=10, nb=5):
     """
     Plot the population trajectories.
 
@@ -678,7 +1314,6 @@ def plot_param_population(rad0=0.5, rad1=0.1, nb=5):
         nb : integer
             number of lines
     """
-    DELTANPOP, NPOPBAR = 0.0305, 7.056
     a = {"start":(1.-rad0)*DELTANPOP, "stop":(1.+rad0)*DELTANPOP}
     b = {"start":(1.-rad1)*NPOPBAR, "stop":(1.+rad1)*NPOPBAR}
     deltanpop = np.linspace(**a, num=nb)
@@ -686,22 +1321,31 @@ def plot_param_population(rad0=0.5, rad1=0.1, nb=5):
 
     fig, ax = plt.subplots()
     k = 0
+    means = []
     for delta in deltanpop:
         for npop in npopbar:
             pop = integrate_pop(delta, npop)
             ax.plot(pop[:,0], pop[:,1], color="k", linestyle="-")
-            print(" ", k)
+            select = (pop[:,0]>(c-win)) * (pop[:,0]<(c+win))
+            means.append(np.mean(pop[select, 1]))
             k+=1
 
     pop = integrate_pop(DELTANPOP, NPOPBAR)
     ax.plot(pop[:,0], pop[:,1], color="r", linestyle="-")
+    select = (pop[:,0]>(c-win)) * (pop[:,0]<(c+win))
+    tip_val = np.mean(pop[select, 1])
+
     ax.set_xlabel(r"time")
     ax.set_ylabel(r"population ($N$)")
+    ylims = ax.get_ylim()
+    ax.fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
+    plot_param_aa("delta n pop", DELTANPOP, **a)
+    plot_param_aa("n pop ax", NPOPBAR, **b)
+
     plt.show()
     plt.close(fig)
-
-    plot_param_aa("delta n pop", **a)
-    plot_param_aa("n pop ax", **b)
 
 def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.pdf", show=False):
     """
@@ -725,7 +1369,6 @@ def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.pdf", show=
             col.plot([xlims[0], xlims[1]], [0., 0.])
             col.plot([xlims[0], xlims[1]], [1., 1.])
 
-    #axes[0,0].set_yscale('log')
     plt.tight_layout(**PADS)
 
     fig = plt.gcf()

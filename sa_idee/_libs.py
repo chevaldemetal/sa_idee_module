@@ -60,6 +60,7 @@ OUTPUTS = [
     'wage_growth'
 ]
 PLOT_LIST = {
+    #'npop':'N',
     'capital':'K',
     'g0':'g',
     'lambda':'\lambda',

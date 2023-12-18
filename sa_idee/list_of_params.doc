@@ -1,136 +1,56 @@
 - Workforce
 --- Constant of the short-term Philips curve
-        phi0 = -0.292 (-0.146000, -0.438000)
+        phi0 = -0.292000 [-0.293168, -0.290832]
 --- Slope of the short-term Philips curve
-        phi1 = 0.469 (0.316575, 0.621425)
+        phi1 = 0.469000 [0.459620, 0.478380]
 --- factor in wage equation
-        gammaw = 0.5 (0.000000, 1.000000)
---- g factor in: dot a / a = alpha + kv g
-        kaldor_verdoorn = 0.5 (0.125000, 0.875000)
+        gammaw = 0.500000 [0.175000, 0.825000]
 --- constant growth rate of productivity
-        alpha = 0.003 (-0.004500, 0.010500)
+        alpha = [-0.000900, 0.020900]
+--- g factor in: dot a / a = alpha + kv g
+        kaldor_verdoorn = 0.500000 [0.100000, 0.900000]
 
 - Workforce growth
 --- leading growth rate of workforce
-        deltanpop = 0.0305 (0.015250, 0.045750)
+        deltanpop = 0.0305 [0.001525, 0.059475]
 --- maximum population in the logistic evolution
-        npopbar = 7.056 (6.350400, 7.761600)
+        npopbar = 7.056 [5.503680, 8.608320]
 
-! Capital
-capital_type=1 ! 0, like Bovari 2020, 1, with Kb
-delta=0.04 ! capital depreciation rate
-nu=3.0 ! Constant capital-to-output ratio
-nu_scale=1. ! scaling of nu in investments
-k_scale=0.0045 ! scaling in capital exponential term Gamma(d)
+- Capital
+--- scaling in capital exponential term Gamma(d)
+        k_scale = 0.0045 [0.003352, 0.005647]
+--- capital depreciation rate
+        delta = 0.040000 [0.039000, 0.041000] 
+--- Constant capital-to-output ratio
+        nu = 3.000000 [2.910000, 3.090000]
 
-! Dividends
-div0=0.051 ! Constant of the dividend function
-div1=0.4729 ! Slope of the dividend function
-divmin=0. ! Minimum of the dividend function
-divmax=0.3 ! Maximum of the dividend function; last value 1.
+- Dividends
+--- Constant of the dividend function
+        div0 = 0.030000 [0.022500, 0.037500]
+--- Slope of the dividend function
+        div1 = 0.472900 [0.354675, 0.591125]
 
-! Investment
-inv_type=1 ! 0, like Bovari2020, 1 with d/nu
-kappa0=0.0397 ! Constant of the investment function
-kappa1=0.719 ! Slope of the investment function
-kappamax=0.3 ! Maximum of the investment function
-kappamin=0. ! Minimum of the investment function
+- Investment
+--- Constant of the investment function
+        kappa0 = 0.039700 [0.029775, 0.049625]
+--- Slope of the investment function
+        kappa1 = 0.719000 [0.539250, 0.898750]
 
-! Inflation
-infla_type=1 ! 0 constant, 1 as Bovari 2020
-eta=0.192 ! relaxation parameter of inflation
-markup_type=1 ! 0 exogenous (constant), 1 endogenous
-mu=1.75 ! markup of prices over the average cost
-omitted=0. ! offset for the production cost in the inflation
-istar=0.02 ! inflation rate targeted by the monetary policy
+- Inflation
+--- relaxation parameter of inflation
+        eta = 0.200000 [0.180000, 0.220000]
+--- markup of prices over the average cost
+        mu = 1.700000 [1.674500, 1.725500]
 
-! Interest rate
-phitaylor=0.5 ! param characterizing the reactivity of the monetary policy
-etar=10. ! relaxation parameter of the interest rate
-rstar=0.01 ! Long-term interest rate target of the economy
-          ! This is also the rate value if constant
-srep=0.1 ! Fraction of the outstanding debt repaid yearly
-fg=1.05 ! Coefficient of forgiveness
-
-! Abatement and control prices
-theta=3.4 ! parameter of the abatement cost function
-deltapbs=-0.0026 !-0.005 ! Exo growth rate of the back-stop technology price
-pbs_c=0.5 ! coeff in pbs equation
-pbs_type=1 ! Type of pbs equation
-
-! Carbon price
-apc=0.125 ! carbon price parameter
-bpc=0.625 ! carbon price parameter
-
-! public - private sector
-sa=0.3 ! Fraction of abatement costs that are subsidized
-
-! leverage
-lev_type=0
-cr0=0.17 ! Constant of the leverage function
-crlev=1. !0.4 ! slope of the leverage function
-
-! Climate damages
-pi1=0. ! damage function parameter
-pi2=0.00236 ! damage function parameter
-pi3=0.0000819 ! damage function parameter
-tempcoeff=1. ! coefficient in front of temperature anomaly in damage function
-zeta3=6.754 ! damage function parameter
-fdamk=1./3 ! (paper = 1./3) fraction of environmental damage allocated
-          !  to the stock of capital
-dam_type=1 !  by default, 1: no damage
-          !              2: medium damage
-          !              3: high damage
-
-! CO2 emissions
-sigma_type=1 ! Type of sigma equation
-delta_eland=-0.022 ! Growth rate of land-use change CO2 of emissions
-deltagsigma=-0.0175 ! dynamics of emissivity
-sigma_c=0.2 ! coeff in sigma equation
-
-! Climate constants for climate module
-climate_sens=3.1 ! Climate sensitivity
-gammastar=0.0176 ! Heat exchange coefficient between temperature layers
-f2co2=3.681 ! Change in radiative forcing resulting from doubling of CO2
-cat_pind=588. ! CO2 preind conc in atmosphere
-cup_pind=360. ! CO2 preind conc in upper layer of ocean and biosphere
-clo_pind=1720. ! CO2 preindustrial concentration in bottom layer of the ocean
-fexo0=0. ! Initial value of the exogenous radiative forcing
-fexo1=0. ! value of the exogenous radiative forcing in 2100
-phi12=0.024 ! Transfer coef for carbon from the atmo to the upper ocean
-phi23=0.001 ! Transfer coef for carbon from the upper ocean/biosphere
-           !  to the lower ocean
-heat_cap_at=1/.098 ! Heat capacity of the atmo biosphere and
-                  ! upper ocean
-heat_cap_lo=3.52 ! Heat capacity of the deeper ocean
-
-! Initial conditions, values with * are equal as in the code R
-y_ini=59.7387 !
-npop_ini=4.83 !
-lambda_ini=0.675 !
-omega_ini=0.578 !
-d_ini=1.53 !
-eland_ini=2.6 !
-eind_ini=51.79 ! 35.85 est la valeur dans Bovari 2020
-n_ini=0.03 !
-gsigma_ini=-0.0152 !
-pbs_ini=1500.0 !547.22 !
-rb_ini=0.01 !
-i_ini=0.018 ! initial inflation in 2015
-price_ini=1.
-
-co2at_ini=851. !
-co2up_ini=460. !
-co2lo_ini=1740. !
-temp_ini=1.07 !
-temp0_ini=0.0068 !
-
-! initial time
-t_ini=2015. !
-
-! Numerical parameters
-dt=1./360 !
-tmax=2100. !
+- Interest rate
+--- param characterizing the reactivity of the monetary policy
+        phitaylor = 0.500000 [0.300000, 0.700000]
+--- inflation rate targeted by the monetary policy
+        istar = 0.020000 [0.012000, 0.028000]
+--- Long-term interest rate target of the economy
+        rstar = 0.010000 [0.006000, 0.014000]
+--- relaxation parameter of the interest rate
+        etar = 3.000000 [2.100000, 3.900000]
 
 ------------------------------------------------------------------------
 
@@ -142,4 +62,23 @@ pop_type=0
 pop2=0.000001464
 pop1=-0.009025626
 pop0=18.539646684
+
+capital_type=1 ! 0, like Bovari 2020, 1, with Kb
+nu_scale=1. ! scaling of nu in investments
+
+divmin=0. ! Minimum of the dividend function
+divmax=0.3 ! Maximum of the dividend function; last value 1.
+
+inv_type=1 ! 0, like Bovari2020, 1 with d/nu
+
+kappamax=0.3 ! Maximum of the investment function
+kappamin=0. ! Minimum of the investment function
+
+infla_type=1 ! 0 constant, 1 as Bovari 2020
+markup_type=1 ! 0 exogenous (constant), 1 endogenous
+omitted=0. ! offset for the production cost in the inflation
+
+srep=0.1 ! Fraction of the outstanding debt repaid yearly
+
+fg=1.05 ! Coefficient of forgiveness
 

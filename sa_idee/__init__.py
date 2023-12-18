@@ -31,3 +31,10 @@ from sa_idee._plot_func import plot_param_phillips
 from sa_idee._plot_func import plot_param_gammaw
 from sa_idee._plot_func import plot_param_adot
 from sa_idee._plot_func import plot_param_population
+from sa_idee._plot_func import plot_param_Gamma
+from sa_idee._plot_func import plot_param_dividends
+from sa_idee._plot_func import plot_param_investment
+from sa_idee._plot_func import plot_param_inflation
+from sa_idee._plot_func import plot_param_deltanu
+from sa_idee._plot_func import plot_param_CB_interest_rate
+from sa_idee._plot_func import plot_param_all
