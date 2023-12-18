@@ -426,7 +426,7 @@ def plot_IDEE(path, file_name, figure_name="omega.pdf", figure_name_all="all.pdf
     k = 0
     is_bad = False
                                                                          # check whether it is a bad attractor
-    is_bad = check_bad_attractor(data)
+    is_bad = check_bad_attractor(data, lvars)
     if is_bad:
         ylim_year = -1
         #ylim_year = 100*data[:, lvars.index("inflation")]

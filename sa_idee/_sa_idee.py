@@ -8,7 +8,8 @@ description: This module is can be used to run the sensitivity analysis of the m
 
 TODO:
 
--- faire de groupes
+-- faire des groupes
+-- paraléliser le programme
 """
                                                                          #--- imports -----------------------
 from sa_idee._libs import *
@@ -186,12 +187,17 @@ def make_outputs(path):
         first_ind = 0
 
     print("  {:d} simulations to do".format(nums-first_ind))
+    f = open(road.join(name_dir, OUT_FILE+'_set0'), "r")
+    lvars = f.readline()
+    f.close()
+    lvars = lvars.split('  ')[:-1]
+    lvars = lvars[0].split(' ') + lvars[1:]
     for n in range(first_ind, nums):
                                                                          # load here
         file_name = road.join(name_dir, OUT_FILE+'_set{:d}'.format(n))
         data = np.loadtxt(file_name, skiprows=1)
                                                                          # check whether it is bad attracted
-        bad_array[n] = check_bad_attractor(data)
+        bad_array[n] = check_bad_attractor(data, lvars)
         sample = [n] + samples[n,:].tolist()
                                                                          # load variable names
         f = open(file_name, "r")
@@ -349,7 +355,7 @@ def run_IDEE(sa_class, path):
     print("\n  Mean execution of solving IDEE = {:.1e} s".format(mean_time_loop))
     print("  Total execution time = {:.1f} s".format(timer() - time_start))
 
-def run_SA(sa_class, perc=[2, 98], rm_ex=True):
+def run_SA(sa_class, perc=[1, 99], rm_ex=True):
     """
     Run the sensitivity analysis of the sa_class.
 
@@ -366,6 +372,7 @@ def run_SA(sa_class, perc=[2, 98], rm_ex=True):
     """
                                                                          # copy class
     cc = ProblemSpec({
+        "groups":["groupe 1"]*sa_class["num_vars"],
         "num_vars":sa_class["num_vars"],
         "names":sa_class["names"],
         "bounds":sa_class["bounds"],
@@ -398,9 +405,6 @@ def run_SA(sa_class, perc=[2, 98], rm_ex=True):
         select_rows[i] = False
     sorted_samples = sorted_samples[select_rows,:]
     sorted_results = sorted_results[select_rows,:]
-                                                                         # add noise to the results (to remove divisions by zero)
-    #noise = 1.E-15*np.random.randint(10, size=sorted_results.shape)
-    #sorted_results += noise
                                                                          # update the class
     cc.set_samples(sorted_samples)
     cc.set_results(sorted_results)
@@ -408,6 +412,7 @@ def run_SA(sa_class, perc=[2, 98], rm_ex=True):
     cc["bad_array"] = np.zeros(cc["nb_samples"], dtype=np.bool8)
                                                                          # run the SA
     SA_time_start = timer()
+    #Si = sobol.analyze(cc, cc.results, print_to_console=True)
     cc.analyze_sobol()
     SA_time = timer() - SA_time_start
     print("  Execution time of Sensitivity Analysis = {:.1e} s".format(SA_time))

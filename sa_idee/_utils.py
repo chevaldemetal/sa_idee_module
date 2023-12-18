@@ -9,19 +9,22 @@ description: Some utilities functions.
                                                                          # --- imports ----------------------
 from sa_idee._libs import *
                                                                          # --- functions --------------------
-def check_bad_attractor(data):
+def check_bad_attractor(data, lvars):
     """
     This function checks whether the simulation converges toward the bad attractor.
 
     Input
         data : numpy.ndarray (float)
             the array containing the simulation's data
+        lvars : list (string)
+            the array of variables' name
     Output
         is_bad : boolean
             True wheter it converges toard the bad attractor
     """
     is_bad = False
-    for ind in INDICES:
+    indices = [lvars.index("capital"), lvars.index("omega"), lvars.index("lambda")]
+    for ind in indices:
         raw = data[:, ind]
         is_bad = is_bad or (raw<POURCENT).any() or np.isnan(raw).any()
 
@@ -307,27 +310,27 @@ def extend_IDEE(lvars, data):
                                                                          # append investment ratio kappa
     lvars.append("kappa")
     new = np.zeros((nbrows,1))
-    new[:,0] = data[:,36] / data[:,22]
+    new[:,0] = data[:,lvars.index("investment")] / data[:,lvars.index("gdp")]
     data = np.hstack((data, new))
                                                                          # append dividends ratio
     lvars.append("dividends_ratio")
     new = np.zeros((nbrows,1))
-    new[:,0] = data[:,27] - data[:,37] / data[:,22] / data[:,6]
+    new[:,0] = data[:,lvars.index("smallpi")] - data[:,lvars.index("pir")] / data[:,lvars.index("gdp")] / data[:,lvars.index("price")]
     data = np.hstack((data, new))
                                                                          # append wage growth rate
     lvars.append("wage_growth")
     new = np.zeros((nbrows,1))
-    new[:,0] = comp_growth(data[:,4], nb)
+    new[:,0] = comp_growth(data[:,lvars.index("wage")], nb)
     data = np.hstack((data, new))
                                                                          # append productivity growth
     lvars.append("productivity_growth")
     new = np.zeros((nbrows,1))
-    new[:,0] = comp_growth(data[:,5], nb)
+    new[:,0] = comp_growth(data[:,lvars.index("productivity")], nb)
     data = np.hstack((data, new))
                                                                          # append population growth
     lvars.append("population_growth")
     new = np.zeros((nbrows,1))
-    new[:,0] = comp_growth(data[:,2], nb)
+    new[:,0] = comp_growth(data[:,lvars.index("npop")], nb)
     data = np.hstack((data, new))
     return lvars, data
 

@@ -80,7 +80,6 @@ TMAX = 3000
                                                                          # macros for devs
 RAISE = True
                                                                          # 1 capital 18 omega 19 lambda
-INDICES = [1, 18, 19]
 COM_IDEE = "./gemmes"
 XMP_FILE = "gemmes.dat.example"
 DAT_FILE = "gemmes.dat.World_default"
@@ -92,7 +91,7 @@ DIR_SAVE = road.join(DIR_LOC, "outputs_")
 DT = 1./12
 INFTY_SMALL = 1.E-12
 POURCENT = 0.01
-WINDOW_FREQ = 100
+WINDOW_FREQ = 200
 WINDOW_AMP = [-400, 0]
 WINDOW_MEAN = [-100, 0]
                                                                          # --- macros -----------------------
