@@ -570,7 +570,7 @@ def plot_param_aa(name, dval, start, stop):
         max(start, stop)
     ))
 
-def plot_param_adot(radalpha=0.125, radkv=0.125, c=0.02, win=0.01, nb=5):
+def plot_param_adot(radalpha=0.25, radkv=0.25, c=0.02, win=0.01, nb=5):
     """
     Plot the productivity growth.
 
@@ -915,7 +915,7 @@ def plot_param_dividends(rad0=0.25, rad1=0.25, c=0.07, win=0.01, nb=5):
     plt.show()
     plt.close(fig)
 
-def plot_param_Gamma(rad=0.255, c=2.8, win=0.1, nb=5):
+def plot_param_Gamma(rad=0.255, c=0.96, win=0.03, nb=5):
     """
     Plot te Gamma function.
 
@@ -936,7 +936,7 @@ def plot_param_Gamma(rad=0.255, c=2.8, win=0.1, nb=5):
             -k_scale*(tcdebtratio**2)/(NU**2 - tcdebtratio**2)
         )
         ax.plot(
-            tcdebtratio,
+            tcdebtratio/NU,
             gammad,
             linestyle="-",
             color="k"
@@ -946,7 +946,7 @@ def plot_param_Gamma(rad=0.255, c=2.8, win=0.1, nb=5):
         -K_SCALE*(tcdebtratio**2)/(NU**2 - tcdebtratio**2)
     )
     ax.plot(
-        tcdebtratio,
+        tcdebtratio/NU,
         gammad,
         linestyle="-",
         color="r"
@@ -955,7 +955,7 @@ def plot_param_Gamma(rad=0.255, c=2.8, win=0.1, nb=5):
 
     ylims = ax.get_ylim()
     ax.fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
-    ax.set_xlabel(r"debt ratio to capital ($D/pK$)")
+    ax.set_xlabel(r"debt to capital ratio ($D/pK/\nu$)")
     ax.set_ylabel(r"Gamma function ($\Gamma$)")
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
@@ -1302,7 +1302,7 @@ def plot_param_phillips(rad0=0.004, rad1=0.02, c=0.675, win=0.02, nb=5):
     plt.show()
     plt.close(fig)
 
-def plot_param_population(rad0=0.5, rad1=0.05, c=2100, win=10, nb=5):
+def plot_param_population(rad0=0.6, rad1=0.075, c=2100, win=10, nb=5):
     """
     Plot the population trajectories.
 

@@ -36,6 +36,11 @@ NAMES = [
     "mu",
     "kappa0",
 ]
+GROUPS = [
+    "Inflation",
+    "Inflation",
+    "Investment",
+]
 BOUNDS = [
     [0.16, 0.22],
     [2., 2.05],

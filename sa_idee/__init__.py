@@ -1,6 +1,7 @@
 from sa_idee._libs import plt
 
 from sa_idee._libs import BOUNDS
+from sa_idee._libs import GROUPS
 from sa_idee._libs import LAST_YEAR
 from sa_idee._libs import NAMES
 from sa_idee._libs import OUTPUTS

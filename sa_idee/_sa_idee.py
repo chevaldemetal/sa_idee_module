@@ -36,6 +36,22 @@ def check_dir():
 
     return name_dir
 
+def comp_nb_groups(c):
+    """
+    Compute the number of groups a sa_class has.
+
+    Input
+        c : salib.util.problem.problemspec
+            class of the library salib
+    Ouput
+        c : salib.util.problem.problemspec
+            class updated with nb_samples
+    """
+    n = len(list(dict.fromkeys(c["groups"])))
+    c["nb_groups"] = n
+
+    return c
+
 def comp_nb_samples(c):
     """
     Compute the number of samples a sa_class has.
@@ -107,7 +123,7 @@ def is_close(c1, c2):
     k = "num_vars"
     is_close = error(c1[k]==c2[k], k)
                                                                          # names and outputs
-    for k in ["names", "outputs"]:
+    for k in ["names", "outputs", "groups"]:
         n1 = c1[k]
         n2 = c2[k]
         for n, name in enumerate(n1):
@@ -115,6 +131,9 @@ def is_close(c1, c2):
                                                                          # bounds
     k = "bounds"
     is_close += error(np.allclose(c1[k], c2[k]), k)
+                                                                         # samples
+    k = "samples"
+    is_close += error(np.allclose(c1.samples, c2.samples), k)
                                                                          # results
     try:
         s1 = c1.results.size
@@ -247,7 +266,7 @@ def make_outputs(path):
 
     return results, bad_array, keys
 
-def make_sa_class(Pow=2, names=NAMES, bounds=BOUNDS):
+def make_sa_class(Pow=2, names=NAMES, groups=GROUPS, bounds=BOUNDS):
     """
     This function makes a class of the library SAlib with the required parameters.
 
@@ -256,6 +275,8 @@ def make_sa_class(Pow=2, names=NAMES, bounds=BOUNDS):
             the power used to determine the sample size
         names : list (string)
             name of variables in the SA
+        groups : list (string)
+            names of groups
         bounds : list (integer)
             bounds of the variables
     Ouput
@@ -265,6 +286,7 @@ def make_sa_class(Pow=2, names=NAMES, bounds=BOUNDS):
     sa_class = ProblemSpec({
         "num_vars":len(names),
         "names":names,
+        "groups":groups,
         "bounds":bounds,
         "outputs":OUTPUTS,
     })
@@ -273,6 +295,8 @@ def make_sa_class(Pow=2, names=NAMES, bounds=BOUNDS):
     print("  sa_class made with {:d} samples".format(
         sa_class.samples.shape[0]
     ))
+    sa_class = comp_nb_samples(sa_class)
+    sa_class = comp_nb_groups(sa_class)
 
     return sa_class
 
@@ -291,6 +315,7 @@ def load_sa_class(path):
     sample = np.loadtxt(filename)
     f = open(filename)
     names = f.readline().split(' ')[1:-1]
+    groups = f.readline().split(' ')[1:-1]
     f.close()
 
     filename = road.join(path, "bounds.dat")
@@ -299,11 +324,13 @@ def load_sa_class(path):
     sa_class = ProblemSpec({
         "num_vars":len(names),
         "names":names,
+        "groups":groups,
         "bounds":bounds.tolist(),
         "outputs":["None"]
     })
     sa_class.set_samples(sample)
     sa_class = comp_nb_samples(sa_class)
+    sa_class = comp_nb_groups(sa_class)
 
     filename = road.join(path, "outputs_to_analyze.dat")
     if road.exists(filename):
@@ -355,7 +382,7 @@ def run_IDEE(sa_class, path):
     print("\n  Mean execution of solving IDEE = {:.1e} s".format(mean_time_loop))
     print("  Total execution time = {:.1f} s".format(timer() - time_start))
 
-def run_SA(sa_class, perc=[1, 99], rm_ex=True):
+def run_SA(sa_class, perc=[1, 99], rm_ex=False):
     """
     Run the sensitivity analysis of the sa_class.
 
@@ -372,12 +399,13 @@ def run_SA(sa_class, perc=[1, 99], rm_ex=True):
     """
                                                                          # copy class
     cc = ProblemSpec({
-        "groups":["groupe 1"]*sa_class["num_vars"],
         "num_vars":sa_class["num_vars"],
         "names":sa_class["names"],
+        "groups":sa_class["groups"],
         "bounds":sa_class["bounds"],
         "outputs":sa_class["outputs"]
     })
+    cc = comp_nb_groups(cc)
                                                                          # get the parameters
     sorted_results = sa_class.results.copy()
     sorted_samples = sa_class.samples.copy()
@@ -397,7 +425,7 @@ def run_SA(sa_class, perc=[1, 99], rm_ex=True):
     sorted_results = sorted_results[select_rows,:]
                                                                          # make the good number of rows
     nb_rows = sorted_results.shape[0]
-    Nrem = nb_rows%(2*cc["num_vars"]+2)
+    Nrem = nb_rows%(2*cc["nb_groups"]+2)
     print("  {:d} other samples to remove".format(Nrem))
     del_list = np.random.randint(low=0, high=nb_rows-1, size=Nrem)
     select_rows = [True]*nb_rows
@@ -436,11 +464,14 @@ def save_sa_class(sa_class, path):
     first_line = ""
     for var in sa_class["names"]:
         first_line += var + ' '
+    second_line = ""
+    for var in sa_class["groups"]:
+        second_line += var + ' '
                                                                          # the sample
     np.savetxt(
         fname=road.join(path, "sample.dat"),
         X=sa_class.samples,
-        header=first_line
+        header=first_line + '\n' + second_line
     )
                                                                          # the bounds
     np.savetxt(
@@ -519,12 +550,14 @@ def sort_attractors(sa_class):
     bad_class = ProblemSpec({
         "num_vars":sa_class["num_vars"],
         "names":sa_class["names"],
+        "groups":sa_class["groups"],
         "bounds":sa_class["bounds"],
         "outputs":sa_class["outputs"]
     })
     good_class = ProblemSpec({
         "num_vars":sa_class["num_vars"],
         "names":sa_class["names"],
+        "groups":sa_class["groups"],
         "bounds":sa_class["bounds"],
         "outputs":sa_class["outputs"]
     })
@@ -557,6 +590,7 @@ def sort_attractors(sa_class):
         bad_class.set_samples(bad_s)
         bad_class.set_results(bad_r)
         bad_class = comp_nb_samples(bad_class)
+        bad_class = comp_nb_groups(bad_class)
         bad_class["bad_array"] = np.ones(bad_class["nb_samples"], dtype=np.bool8)
     else:
         print("  there is no bad samples")
@@ -566,6 +600,7 @@ def sort_attractors(sa_class):
         good_class.set_samples(good_s)
         good_class.set_results(good_r)
         good_class = comp_nb_samples(good_class)
+        good_class = comp_nb_groups(good_class)
         good_class["bad_array"] = np.zeros(good_class["nb_samples"], dtype=np.bool8)
     else:
         print("  there is no good samples")

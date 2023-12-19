@@ -6,15 +6,15 @@
 --- factor in wage equation
         gammaw = 0.500000 [0.175000, 0.825000]
 --- constant growth rate of productivity
-        alpha = [-0.000900, 0.020900]
+        alpha = 0.010000 (0.007500, 0.012500)
 --- g factor in: dot a / a = alpha + kv g
-        kaldor_verdoorn = 0.500000 [0.100000, 0.900000]
+        kaldor_verdoorn = 0.500000 (0.375000, 0.625000)
 
 - Workforce growth
 --- leading growth rate of workforce
-        deltanpop = 0.0305 [0.001525, 0.059475]
+        deltanpop = 0.030500 (0.012200, 0.048800)
 --- maximum population in the logistic evolution
-        npopbar = 7.056 [5.503680, 8.608320]
+        npopbar = 7.056000 (6.526800, 7.585200)
 
 - Capital
 --- scaling in capital exponential term Gamma(d)

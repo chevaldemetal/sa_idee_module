@@ -23,6 +23,14 @@ names = [
     "phi0",
     "phi1",
 ]
+groups = [
+    "Inflation",
+    "Inflation",
+    "Investment",
+    "Investment",
+    "Phillips",
+    "Phillips"
+]
 bounds = [
     [0.180000, 0.220000],
     [1.674500, 1.725500],
@@ -38,7 +46,7 @@ bounds = [
 path = sa.check_dir()
 
 # 1.2 initialize a class
-sa_class = sa.make_sa_class(Pow, names, bounds)
+sa_class = sa.make_sa_class(Pow, names, groups, bounds)
 rep = input("\n  Number of samples is {:d}. Continue? Yes (Y) / No (N):\n".format(
     sa_class.samples.shape[0]))
 if not rep=="Y":
