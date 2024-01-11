@@ -1,32 +1,32 @@
 - Workforce
 --- Constant of the short-term Philips curve
-        phi0 = -0.292000 [-0.293168, -0.290832]
+        phi0 = -0.292000 [-0.293752, -0.290248]
 --- Slope of the short-term Philips curve
-        phi1 = 0.469000 [0.459620, 0.478380]
+        phi1 = 0.469000 [0.452585, 0.485415]
 --- factor in wage equation
-        gammaw = 0.500000 [0.175000, 0.825000]
+        gammaw = 0.500000 [0.450000, 0.550000]
 --- constant growth rate of productivity
-        alpha = 0.010000 (0.007500, 0.012500)
+        alpha = 0.010000 [0.007500, 0.012500]
 --- g factor in: dot a / a = alpha + kv g
-        kaldor_verdoorn = 0.500000 (0.375000, 0.625000)
+        kaldor_verdoorn = 0.500000 [0.375000, 0.625000]
 
 - Workforce growth
 --- leading growth rate of workforce
-        deltanpop = 0.030500 (0.012200, 0.048800)
+        deltanpop = 0.050000 [0.020000, 0.080000]
 --- maximum population in the logistic evolution
-        npopbar = 7.056000 (6.526800, 7.585200)
+        npopbar = 5.040000 [4.662000, 5.418000]
 
 - Capital
 --- scaling in capital exponential term Gamma(d)
-        k_scale = 0.0045 [0.003352, 0.005647]
+        k_scale = 0.004500 [0.003352, 0.005647]
 --- capital depreciation rate
-        delta = 0.040000 [0.039000, 0.041000] 
+        delta = 0.040000 [0.035000, 0.045000]
 --- Constant capital-to-output ratio
-        nu = 3.000000 [2.910000, 3.090000]
+        nu = 3.000000 [2.610000, 3.390000]
 
 - Dividends
 --- Constant of the dividend function
-        div0 = 0.030000 [0.022500, 0.037500]
+        div0 = 0.027500 [0.020625, 0.034375]
 --- Slope of the dividend function
         div1 = 0.472900 [0.354675, 0.591125]
 
@@ -38,9 +38,9 @@
 
 - Inflation
 --- relaxation parameter of inflation
-        eta = 0.200000 [0.180000, 0.220000]
+        eta = 0.200000 [0.170000, 0.230000]
 --- markup of prices over the average cost
-        mu = 1.700000 [1.674500, 1.725500]
+        mu = 1.700000 [1.666000, 1.734000]
 
 - Interest rate
 --- param characterizing the reactivity of the monetary policy
@@ -48,7 +48,7 @@
 --- inflation rate targeted by the monetary policy
         istar = 0.020000 [0.012000, 0.028000]
 --- Long-term interest rate target of the economy
-        rstar = 0.010000 [0.006000, 0.014000]
+        rstar = 0.020000 [0.012000, 0.028000]
 --- relaxation parameter of the interest rate
         etar = 3.000000 [2.100000, 3.900000]
 

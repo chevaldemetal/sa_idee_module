@@ -397,6 +397,9 @@ def run_SA(sa_class, perc=[1, 99], rm_ex=False):
         sa_class : SALib.util.problem.ProblemSpec
             the class of the library SAlib
     """
+    if sa_class==None:
+        print("There is no SA to do since there is no good points.")
+        return None
                                                                          # copy class
     cc = ProblemSpec({
         "num_vars":sa_class["num_vars"],

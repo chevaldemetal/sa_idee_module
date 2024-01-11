@@ -15,25 +15,25 @@ GAMMAW = 0.5
 PHI0, PHI1 = -0.292, 0.469
 DELTA, NU = 0.04, 3.
 ALPHAC, KVC = 0.01, 0.5
-DIV0, DIV1 = 0.03, 0.4729
+DIV0, DIV1 = 0.0275, 0.4729
 K_SCALE = 0.0045
 MU, ETA = 1.7, 0.2
 POW = 1./8
 KAPPA0, KAPPA1 = 0.0397, 0.719
-DELTANPOP, NPOPBAR = 0.0305, 7.056
+DELTANPOP, NPOPBAR = 0.05, 0.8*6.3
 RB0 = 0.01
 
 PHITAYLOR = 0.5
 ETAR = 3.
 ISTAR = 0.02
-RSTAR = 0.01
+RSTAR = 0.02
 
-Im, Ia = 2.5, 5.5
-Gm, Ga = 2., 5.
-PIm, PIa = 21., 10.
-LAMm, LAMa = 67.5, 8.
-KAPPAm, KAPPAa = 15., 12.
-OMEGAm, OMEGAa = 65., 7.5
+Im, Ia = 2.5, 2.5
+Gm, Ga = 2.5, 2.5
+PIm, PIa = 19., 10.
+LAMm, LAMa = 74., 6.
+KAPPAm, KAPPAa = 19., 10.
+OMEGAm, OMEGAa = 65., 7.
                                                                          # --- functions --------------------
 def perso_savefig(fig, path, figure_name, show):
     """
@@ -80,6 +80,10 @@ def plot_histo(c, path, n_bins=100, figsize=(15,10), figure_name="histograms.pdf
         show : boolean
             if True, show else save figure
     """
+    if c==None:
+        print("nothing to plot")
+        return 0
+
     nbrows, nbcols = 4, 4
     try:
         s = c.results.shape[0]
@@ -419,11 +423,8 @@ def plot_IDEE(path, file_name, figure_name="omega.pdf", figure_name_all="all.pdf
     plot_list_keys = list(PLOT_LIST.keys())
     nb_p = len(plot_list_keys)
     nbrows = nb_p//NUMCOLS
-    if nb_p%NUMCOLS > 0:
-        nbrows += 1
                                                                          # make the figure
     fig, axes = plt.subplots(nbrows, NUMCOLS, sharex=True, figsize=(A4W, 4.))
-    k = 0
     is_bad = False
                                                                          # check whether it is a bad attractor
     is_bad = check_bad_attractor(data, lvars)
@@ -435,32 +436,51 @@ def plot_IDEE(path, file_name, figure_name="omega.pdf", figure_name_all="all.pdf
     else:
         ylim_year = -1
 
-    for i in range(nbrows):
-        for j in range(NUMCOLS):
-            ax = axes[i,j]
-            try:
-                var = plot_list_keys[k]
-                if var=="debtratio":
-                    raw = 1./data[:, lvars.index(var)]
-                    mean, damp = comp_mean(raw, select)
-                    ax.set_ylabel(r"$1/d$")
-                elif var=="capital":
-                    raw = data[:, lvars.index(var)]
-                    mean = np.nan
-                    ax.set_ylabel(r"$K$")
+    k = 0
+    while k<len(PLOT_LIST):
+        try:
+            var = plot_list_keys[k]
+            ls = '-'
+            if var=="capital" or var=="npop":
+                if var=="capital":
+                    ax = axes[-1,-1].twinx()
+                    ls = '--'
                 else:
-                    raw = 100*data[:, lvars.index(var)]
-                    mean, damp = comp_mean(raw, select)
-                    ax.set_ylabel(r"${}$".format(PLOT_LIST[var])) # var.replace("_", "\n"))
+                    ax = axes[-1,-1]
+                raw = data[:, lvars.index(var)]
+                mean = np.nan
+                ax.set_ylabel(r"${}$".format(PLOT_LIST[var]))
 
-                mean = mean if not is_bad else np.nan
-                raw[ylim_year:] = raw[ylim_year]
-                ax.plot(time, raw, time, mean*np.ones(time.size))
+            elif var=="debtratio":
+                ax = axes[k//NUMCOLS, k%NUMCOLS]
+                raw = 1./data[:, lvars.index(var)]
+                mean, damp = comp_mean(raw, select)
+                ax.set_ylabel(r"$1/d$")
+                ax.plot(time, [1./NU]*time.size, color='C3', linestyle=':')
 
-            except IndexError:
-                pass
-            finally:
-                k += 1
+            else:
+                ax = axes[k//NUMCOLS, k%NUMCOLS]
+                raw = 100*data[:, lvars.index(var)]
+                mean, damp = comp_mean(raw, select)
+                ax.set_ylabel(r"${}$".format(PLOT_LIST[var])) # var.replace("_", "\n"))
+
+            mean = mean if not is_bad else np.nan
+            raw[ylim_year:] = raw[ylim_year]
+            line1, line2, = ax.plot(time, raw, time, mean*np.ones(time.size), 
+                linestyle=ls, label=r"${}$".format(PLOT_LIST[var]))
+
+            if var=="npop":
+                xlims, ylims = ax.get_xlim(), ax.get_ylim()
+                line3, = ax.plot([0., 1.], [0., 1.], color="C0",
+                    linestyle="--", label=r"$K$")
+                ax.set_xlim(xlims)
+                ax.set_ylim(ylims)
+                ax.legend(framealpha=1., loc=10, handles=[line1, line3])
+
+        except IndexError:
+            pass
+        finally:
+            k += 1
                                                                          # For omega,
                                                                          # compute and plot details in
                                                                          # another figure
@@ -512,8 +532,8 @@ def plot_map(badc, goodc, path, figure_name="map.pdf", show=False):
         isplot : boolean
             True if there is a plot, False else
     """
-    if badc==None:
-        print("There is no map to plot since there is no bad point.")
+    if badc==None or goodc==None:
+        print("There is no map to plot since there is no bad or good point.")
         return False
 
     names = badc["names"]
@@ -563,16 +583,20 @@ def plot_param_aa(name, dval, start, stop):
         stop : float
             sup bound
     """
-    print("{}: {:.6f} ({:.6f}, {:.6f})".format(
+    print("{}: {:.6f} [{:.6f}, {:.6f}]".format(
         name,
         dval,
         min(start, stop),
         max(start, stop)
     ))
 
-def plot_param_adot(radalpha=0.25, radkv=0.25, c=0.02, win=0.01, nb=5):
+def plot_param_adot(radalpha=0.25, radkv=0.25, c=Gm/100, win=0.01, nb=5):
     """
     Plot the productivity growth.
+    gdp growth rate
+        https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG
+    productivity growth rate
+        https://www.researchgate.net/figure/Global-productivity-growth-since-1990-Annual-growth-rates_fig4_321381401
 
     Input
         radalpha : float
@@ -681,9 +705,13 @@ def plot_param_all():
     print("\n  Population")
     plot_param_population()
 
-def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=0.02, win0=0.01, c1=62.25, win1=5, nb0=5, nb1=5):
+def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=Im/100, win0=0.01, c1=62.25, win1=5, nb0=5, nb1=5):
     """
     plot central bank interest rate
+    inflation
+        https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=1W
+    interest rate
+        https://data.worldbank.org/indicator/FR.INR.LEND?locations=US-CN-IN-GB&view=chart 
 
     Input
     """
@@ -760,9 +788,53 @@ def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=0.02,
     plt.show()
     plt.close(fig)
 
-def plot_param_deltanu(rad0=0.025, rad1=0.03, c=0.15, win=0.01, nb=5):
+def plot_param_deltanu(rad0=0.125, rad1=0.13, c=KAPPAm/100, win=0.02, nb=5):
     """
     Plot delta and nu parameters.
+
+    gdp growth rate
+        https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG
+
+    Some data
+
+    investment constant 2015 USD
+        https://data.worldbank.org/indicator/NE.GDI.TOTL.KD?contextual=default&end=2022&locations=CN-JP-US-IN-EU&start=2000&view=chart
+
+        c = [1., 3.36, 5.82, 6.8]
+        us = [3., 3., 3.86, 4.44]
+        eu = [2.57, 2.68, 2.81, 3.49]
+        j = [1.2, 1.2, 1.2, 1.2]
+        i = [0.1, 0.6, 0.7, 1.12]
+
+    gdp constant 2015 USD
+        https://data.worldbank.org/indicator/NY.GDP.MKTP.KD?e
+
+        gdpc = [3.6, 7.55, 11.06, 16.33]
+        gdpus = [14.5, 16.38, 18.21, 20.93]
+        gdpeu = [11.74, 12.9, 13.55, 15.28]
+        gdpj = [4, 4, 4.44, 4.5]
+        gdpi = [0.8, 1.54, 2.1, 2.96]
+
+    debt ratio
+        https://wolfstreet.com/2017/11/22/private-sector-debt-implode-next-us-eurozone-japan-china-or-canada/
+
+        dc = [1.1, 1.5, 2.1, 2.9]
+        dus = [1.7, 1.5, 1.5, 1.6]
+        deu = [1.5, 1.65, 1.62, 1.3]
+        dj = [1.6, 1.68, 1.6, 1.5]
+
+    sumI, sumGDP, prctI, sumd, prctd = [], [], [], [], []
+    for n in range(4):
+        sumI.append(c[n] + us[n] + eu[n] + j[n] + i[n])
+        sumGDP.append(gdpc[n] + gdpus[n] + gdpeu[n] + gdpj[n] + gdpi[n])
+        sumd.append(dc[n] + dus[n] + deu[n] + dj[n])
+        prctI.append(sumI[n] / sumGDP[n])
+        prctd.append(sumd[n] / (sumGDP[n] - gdpi[n]))
+
+    results
+        sumI = [7.87, 10.839999999999998, 14.389999999999999, 17.05]
+        sumGDP = [34.64, 42.37, 49.36000000000001, 60.0]
+        prctI = [0.22719399538106236, 0.2558413972150106, 0.29153160453808746, 0.2841666666666667]
 
     Input
         rad0: float
@@ -831,9 +903,13 @@ def plot_param_deltanu(rad0=0.025, rad1=0.03, c=0.15, win=0.01, nb=5):
     plt.show()
     plt.close(fig)
 
-def plot_param_dividends(rad0=0.25, rad1=0.25, c=0.07, win=0.01, nb=5):
+def plot_param_dividends(rad0=0.25, rad1=0.25, c=PIm/NU/100, win=0.005, nb=5):
     """
     Plot dividend functions
+    dividends
+        https://revenusetdividendes.com/les-entreprises-francaises-sont-elles-vraiment-plus-genereuses-en-dividendes-en-europe/
+    profit
+        http://dln.jaipuria.ac.in:8080/jspui/bitstream/123456789/2865/1/MGI%20Global%20Competition_Full%20Report_Sep%202015.pdf
 
     Input
         rad0 : float
@@ -844,6 +920,8 @@ def plot_param_dividends(rad0=0.25, rad1=0.25, c=0.07, win=0.01, nb=5):
             number of points
     """
     MAXB, MAXT = 0.1, 0.3
+    PROFITTODIV = 0.45
+    print("dividends are set to approx 45% of profits.")
 
     a = {"start":(1.-rad0)*DIV0, "stop":(1.+rad0)*DIV0}
     b = {"start":(1.-rad1)*DIV1, "stop":(1.+rad1)*DIV1}
@@ -853,6 +931,8 @@ def plot_param_dividends(rad0=0.25, rad1=0.25, c=0.07, win=0.01, nb=5):
 
     t = np.linspace(0., 1000, 1000)
     smallpik = (PIm + PIa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100/NU
+    div_that_should_be = np.clip(PROFITTODIV * smallpik, 0., 0.3)*NU
+
     select = (smallpik>(c-win)) * (smallpik<(c+win))
 
     fig, axes = plt.subplots(nrows=3)
@@ -894,6 +974,12 @@ def plot_param_dividends(rad0=0.25, rad1=0.25, c=0.07, win=0.01, nb=5):
         t,
         div,
         linestyle="-",
+        color="r"
+    )
+    axes[1].plot(
+        t,
+        div_that_should_be,
+        linestyle="--",
         color="r"
     )
     tip_val = np.mean(div[select])
@@ -964,9 +1050,14 @@ def plot_param_Gamma(rad=0.255, c=0.96, win=0.03, nb=5):
     plt.show()
     plt.close(fig)
 
-def plot_param_gammaw(rad=0.65, c=0.675, win=0.02, nb=5):
+def plot_param_gammaw(rad=0.1, c=LAMm/100, win=0.02, nb=5):
     """
-    Plot the influence of gammaw on inflation.
+    Plot the influence of gammaw on Phillips curve.
+
+    wage growth
+        https://www.ilo.org/asia/media-centre/news/WCMS_651039/lang--ja/index.htm
+    employment 15 - 64
+        https://en.wikipedia.org/wiki/List_of_sovereign_states_by_employment_rate
 
     Input
         rad : float
@@ -980,7 +1071,7 @@ def plot_param_gammaw(rad=0.65, c=0.675, win=0.02, nb=5):
     lams = (LAMm + LAMa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
     select = (lams>(c-win)) * (lams<(c+win))
 
-    I = np.linspace(-0.05, 0.05, 7)
+    I = np.linspace(-0.01, 0.04, 7)
     b_a = {"start":(1.-rad)*GAMMAW, "stop":(1.+rad)*GAMMAW}
     gammaw = np.linspace(**b_a, num=nb)
 
@@ -1036,12 +1127,21 @@ def plot_param_gammaw(rad=0.65, c=0.675, win=0.02, nb=5):
     plt.show()
     plt.close(fig)
 
-def plot_param_inflation(rad0=0.015, rad1=0.1, c=0.65, win=0.02, nb=5):
+def plot_param_inflation(rad0=0.02, rad1=0.15, c=OMEGAm/100, win=0.015, nb=5):
     """
     plot inflation depending on eta and mu
+
+    inflation
+        https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=1W
+    wage
+        https://ourworldindata.org/grapher/labor-share-of-gdp?tab=chart&time=2004..2020
+    profit ratio
+        http://dln.jaipuria.ac.in:8080/jspui/bitstream/123456789/2865/1/MGI%20Global%20Competition_Full%20Report_Sep%202015.pdf
+
     """
     t = np.linspace(0., 1000, 1000)
     omega = (OMEGAm + OMEGAa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
+    smallpik = (PIm + PIa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100/NU
     select = (omega>(c-win)) * (omega<(c+win))
 
     a = {"start":(1.-rad0)*MU, "stop":(1.+rad0)*MU}
@@ -1050,17 +1150,23 @@ def plot_param_inflation(rad0=0.015, rad1=0.1, c=0.65, win=0.02, nb=5):
     mul = np.linspace(**a, num=nb)
     etal = np.linspace(**b, num=nb)
 
-    fig, axes = plt.subplots(nrows=3)
+    fig, axes = plt.subplots(nrows=4)
     axes[2].plot(
         t,
         omega,
         linestyle="-",
         color="k"
     )
+    axes[3].plot(
+        t,
+        smallpik,
+        linestyle="-",
+        color="k"
+    )
     means = []
     for mu in mul:
         for eta in etal:
-            i = eta * ( mu * omega - 1.)
+            i = eta * ( (mu + smallpik) * omega - 1.)
             axes[0].plot(
                 omega,
                 i,
@@ -1075,7 +1181,7 @@ def plot_param_inflation(rad0=0.015, rad1=0.1, c=0.65, win=0.02, nb=5):
             )
             means.append(np.mean(i[select]))
 
-    i = ETA * ( MU * omega - 1.)
+    i = ETA * ( (MU + smallpik) * omega - 1.)
     axes[0].plot(
         omega,
         i,
@@ -1099,7 +1205,9 @@ def plot_param_inflation(rad0=0.015, rad1=0.1, c=0.65, win=0.02, nb=5):
     axes[1].set_xlabel(r"time ($t$)")
     axes[2].set_ylabel(r"wage share ($\omega$)")
     axes[2].set_xlabel(r"time ($t$)")
-    for ax in axes[:-1]:
+    axes[3].set_ylabel(r"profit to capital ratio ($\Pi / p K$)")
+    axes[3].set_xlabel(r"time ($t$)")
+    for ax in axes[:-2]:
         ax.plot(
             list(ax.get_xlim()),
             [0., 0.],
@@ -1114,9 +1222,19 @@ def plot_param_inflation(rad0=0.015, rad1=0.1, c=0.65, win=0.02, nb=5):
     plt.show()
     plt.close(fig)
 
-def plot_param_investment(rad0=0.25, rad1=0.25, c=0.21, win=0.025, nb=5):
+def plot_param_investment(rad0=0.25, rad1=0.25, c=KAPPAm/100, win=0.02, nb=5):
     """
     Plot investment functions
+
+    investment constant 2015 USD
+        https://data.worldbank.org/indicator/NE.GDI.TOTL.KD?contextual=default&end=2022&locations=CN-JP-US-IN-EU&start=2000&view=chart
+
+        prctI = [0.22719399538106236, 0.2558413972150106, 0.29153160453808746, 0
+
+    gdp growth rate
+        https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG
+    profit
+        http://dln.jaipuria.ac.in:8080/jspui/bitstream/123456789/2865/1/MGI%20Global%20Competition_Full%20Report_Sep%202015.pdf
 
     Input
         rad0 : float
@@ -1126,7 +1244,7 @@ def plot_param_investment(rad0=0.25, rad1=0.25, c=0.21, win=0.025, nb=5):
         nb : integer
             number of points
     """
-    KAPPAMIN, KAPPAMAX = 0., 0.3
+    KAPPAMIN, KAPPAMAX = 0., 0.5
     MAXB, MAXT = 0.1, 0.3
 
     a = {"start":(1.-rad0)*KAPPA0, "stop":(1.+rad0)*KAPPA0}
@@ -1210,7 +1328,7 @@ def plot_param_investment(rad0=0.25, rad1=0.25, c=0.21, win=0.025, nb=5):
     axes[2].set_ylabel(r"growth rate ($g$)")
     axes[3].set_ylabel(r"profit to GDP ($\pi$)")
     axes[3].set_xlabel(r"time ($t$)")
-    axes[4].set_ylabel(r"debta ratio to capital ($d/\nu$)")
+    axes[4].set_ylabel(r"debt to capital ratio ($d/\nu$)")
     axes[4].set_xlabel(r"time ($t$)")
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
@@ -1220,9 +1338,14 @@ def plot_param_investment(rad0=0.25, rad1=0.25, c=0.21, win=0.025, nb=5):
     plt.show()
     plt.close(fig)
 
-def plot_param_phillips(rad0=0.004, rad1=0.02, c=0.675, win=0.02, nb=5):
+def plot_param_phillips(rad0=0.006, rad1=0.035, c=LAMm/100, win=0.005, nb=5):
     """
     Plot the phillips curve.
+
+    employment 15 - 64
+        https://en.wikipedia.org/wiki/List_of_sovereign_states_by_employment_rate
+    wage growth
+        https://www.ilo.org/asia/media-centre/news/WCMS_651039/lang--ja/index.htm
 
     Input
         rad0 : float
@@ -1305,6 +1428,10 @@ def plot_param_phillips(rad0=0.004, rad1=0.02, c=0.675, win=0.02, nb=5):
 def plot_param_population(rad0=0.6, rad1=0.075, c=2100, win=10, nb=5):
     """
     Plot the population trajectories.
+    15-56 ans
+        https://population.un.org/wpp/Graphs/DemographicProfiles/Line/900
+    public sector size
+        https://en.wikipedia.org/wiki/List_of_countries_by_public_sector_size
 
     Input
         rad0 : float
@@ -1361,6 +1488,10 @@ def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.pdf", show=
         show : boolean
             if True, show, else save fig
     """
+    if sa_class==None:
+        print("nothing to plot")
+        return 0
+
     axes = sa_class.plot()
     axes[0,0].set_ylim(ylims[0], ylims[1])
     for row in axes:

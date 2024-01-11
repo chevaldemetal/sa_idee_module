@@ -315,7 +315,7 @@ def extend_IDEE(lvars, data):
                                                                          # append dividends ratio
     lvars.append("dividends_ratio")
     new = np.zeros((nbrows,1))
-    new[:,0] = data[:,lvars.index("smallpi")] - data[:,lvars.index("pir")] / data[:,lvars.index("gdp")] / data[:,lvars.index("price")]
+    new[:,0] = np.clip(data[:,lvars.index("smallpi")] - data[:,lvars.index("pir")] / data[:,lvars.index("gdp")] / data[:,lvars.index("price")], 0., 0.3)
     data = np.hstack((data, new))
                                                                          # append wage growth rate
     lvars.append("wage_growth")
@@ -348,7 +348,7 @@ def integrate_pop(deltanpop, npopbar):
             solution array
     """
     t0 = 2015
-    y0 = 4.83
+    y0 = 0.8*5.5
     dt = 1./12
     t_bound = 3000
 

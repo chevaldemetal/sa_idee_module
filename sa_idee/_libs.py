@@ -65,8 +65,6 @@ OUTPUTS = [
     'wage_growth'
 ]
 PLOT_LIST = {
-    #'npop':'N',
-    'capital':'K',
     'g0':'g',
     'lambda':'\lambda',
     'debtratio':'d',
@@ -78,6 +76,8 @@ PLOT_LIST = {
     'dividends_ratio':'\Delta',
     'inflation':'i',
     'rb':'r',
+    'npop':'N',
+    'capital':'K',
 }
 NUMCOLS = 3
 LAST_YEAR = 3000
