@@ -8,7 +8,6 @@ description: This module is can be used to run the sensitivity analysis of the m
 
 TODO:
 
--- faire des groupes
 -- paraléliser le programme
 """
                                                                          #--- imports -----------------------
@@ -87,9 +86,15 @@ def IDEE(params, n, name_dir):
         name_dir : string
             the outputs' directory
     """
+                                                                         # create a working directory
     os.chdir(DIR_IDEE)
+    wdir = "simu_{:d}".format(n)
+    os.mkdir(wdir)
+    shutil.copyfile(XMP_FILE, road.join(wdir, DAT_FILE))
+    shutil.copyfile(REG_FILE, road.join(wdir, REG_FILE))
+    shutil.copy(COM_IDEE, road.join(wdir, COM_IDEE))
+    os.chdir(wdir)
                                                                          # change the file of parameters
-    shutil.copyfile(XMP_FILE, DAT_FILE)
     f = open(DAT_FILE, 'a')
     f.write(" region%dt={:.6f}\n".format(DT))
     f.write(" region%Tmax={:.6f}\n".format(TMAX))
@@ -103,6 +108,8 @@ def IDEE(params, n, name_dir):
     shutil.copyfile(OUT_FILE, road.join(name_dir, OUT_FILE + '_set{:d}'.format(n)))
 
     os.chdir(DIR_LOC)
+                                                                         # delete the working dir
+    shutil.rmtree(road.join(DIR_IDEE, wdir))
 
 def is_close(c1, c2):
     """
@@ -354,7 +361,7 @@ def load_sa_class(path):
 
 def run_IDEE(sa_class, path):
     """
-    This function makes a sensivity analysis of the model IDEE.
+    This function makes a serie of runs of the model IDEE.
 
     Input
         sa_class : SALib.util.problem.ProblemSpec
@@ -381,6 +388,47 @@ def run_IDEE(sa_class, path):
     mean_time_loop = np.mean(loop_times)
     print("\n  Mean execution of solving IDEE = {:.1e} s".format(mean_time_loop))
     print("  Total execution time = {:.1f} s".format(timer() - time_start))
+
+def run_IDEE_multiproc(sa_class, path, nb=4):
+    """
+    Parallel version of the function run_IDEE.
+
+    Input
+        sa_class : SALib.util.problem.ProblemSpec
+            the class of the library SAlib
+        path : string
+            the  directory where to save IDEE's outputs
+        nb : integer
+            number of CPU used
+    """
+
+    time_start = timer()
+    nbmax = sa_class.samples.shape[0]
+    name_dir = road.join(path, RAW_PATH)
+    if not road.exists(name_dir):
+        os.mkdir(name_dir)
+                                                                         # run the model
+    names = sa_class["names"]
+                                                                         # parralel loop is here
+    nb_samples = sa_class.samples.shape[0]
+    args = [[dict(zip(names, sa_class.samples[n])), n, name_dir] for n in range(nb_samples)]
+
+    with Pool(nb) as pool:
+        for n in pool.imap(run_IDEE_multiproc_f, args):
+            print("\n--- {:d} / {:d} ---".format(n+1, nbmax))
+
+    print("  Total execution time = {:.1f} s".format(timer() - time_start))
+
+def run_IDEE_multiproc_f(arg):
+    """
+    Function called into the parallel loop.
+
+    Input
+        arg : list (*)
+            [params, number of sample, name of dir]
+    """
+    IDEE(arg[0], arg[1], arg[2])
+    return arg[1]
 
 def run_SA(sa_class, perc=[1, 99], rm_ex=False):
     """

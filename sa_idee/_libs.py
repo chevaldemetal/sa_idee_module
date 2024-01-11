@@ -28,6 +28,9 @@ from SALib.analyze import sobol
 from SALib import ProblemSpec
 
 from timeit import default_timer as timer
+
+import multiprocessing
+from multiprocessing import Pool
                                                                          # --- macros -----------------------
                                                                          # macros for user
 POW = 6
@@ -89,6 +92,7 @@ COM_IDEE = "./gemmes"
 XMP_FILE = "gemmes.dat.example"
 DAT_FILE = "gemmes.dat.World_default"
 OUT_FILE = "gemmes.out.World_default"
+REG_FILE = "regions.dat"
 DIR_IDEE = "/home/admin/Documents/sciences/postdocGU/codes/GEMMESCLIM/gemmes_cpl/sources/"
 RAW_PATH = "raw_data"
 DIR_LOC = os.getcwd()

@@ -10,10 +10,15 @@ description: Main script of the code to test SA on IDEE.
 import sys, os
 import sa_idee as sa
 import os.path as road
+print("usage: ipython main_script.py [Power] [Nb CPU]")
 try:
     Pow = int(sys.argv[1])
 except IndexError:
     Pow = 4
+try:
+    nb_cpu = int(sys.argv[2])
+except IndexError:
+    nb_cpu = 1
                                                                          # --- macros -----------------------
 names = [
     "eta",
@@ -57,7 +62,10 @@ if not rep=="Y":
 sa.save_sa_class(sa_class, path)
 
 # 1.4 make a set of simulations
-sa.run_IDEE(sa_class, path)
+if nb_cpu==1:
+    sa.run_IDEE(sa_class, path)
+else:
+    sa.run_IDEE_multiproc(sa_class, path, nb_cpu)
 
 # 1.5 compute the outputs
 resdata, bad_array, outputs_name = sa.make_outputs(path)

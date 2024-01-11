@@ -15,6 +15,7 @@ from sa_idee._sa_idee import check_dir
 from sa_idee._sa_idee import make_sa_class
 from sa_idee._sa_idee import save_sa_class
 from sa_idee._sa_idee import run_IDEE
+from sa_idee._sa_idee import run_IDEE_multiproc
 from sa_idee._sa_idee import make_outputs
 from sa_idee._sa_idee import set_results
 from sa_idee._sa_idee import load_sa_class
