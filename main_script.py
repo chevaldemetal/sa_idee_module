@@ -68,7 +68,10 @@ else:
     sa.run_IDEE_multiproc(sa_class, path, nb_cpu)
 
 # 1.5 compute the outputs
-resdata, bad_array, outputs_name = sa.make_outputs(path)
+if nb_cpu==1:
+    resdata, bad_array, outputs_name = sa.make_outputs(path)
+else:
+    resdata, bad_array, outputs_name = sa.make_outputs_multiproc(path, nb_cpu)
 
 # 1.6 set the results in the class
 sa_class = sa.set_results(sa_class, resdata, bad_array, outputs_name)

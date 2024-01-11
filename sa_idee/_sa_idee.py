@@ -179,6 +179,8 @@ def make_outputs(path):
         keys : list (string)
             outputs names
     """
+    time_start = timer()
+
     name_dir = road.join(path, RAW_PATH)
     samples = np.loadtxt(road.join(path, "sample.dat"))
     nums = samples.shape[0]
@@ -224,13 +226,6 @@ def make_outputs(path):
         data = np.loadtxt(file_name, skiprows=1)
                                                                          # check whether it is bad attracted
         bad_array[n] = check_bad_attractor(data, lvars)
-        sample = [n] + samples[n,:].tolist()
-                                                                         # load variable names
-        f = open(file_name, "r")
-        lvars = f.readline()
-        f.close()
-        lvars = lvars.split('  ')[:-1]
-        lvars = lvars[0].split(' ') + lvars[1:]
                                                                          # extend data
         lvars, data = extend_IDEE(lvars, data)
         time = data[:,0]
@@ -271,7 +266,156 @@ def make_outputs(path):
             np.savetxt(fname=tmp_file_name, X=results)
             np.savetxt(fname=tmp_bad_name, X=bad_array)
 
+    print("  Total execution time for outputs = {:.1f} s".format(timer() - time_start))
+
     return results, bad_array, keys
+
+def make_outputs_multiproc(path, nb_cpu=4):
+    """
+    Parallel version of the make_outputs_multiproc.
+
+    Input
+        path : string
+            location of the simulations
+        nb_cpu : integer
+            number of CPUs to be used
+    Output
+        result : numpy.ndarray (float)
+            the array of resulted post-treatment data
+        bad_array : numpy.ndarray (boolean)
+            True if it is a simulation toward the bad attractor
+        keys : list (string)
+            outputs names
+    """
+    time_start = timer()
+    
+    name_dir = road.join(path, RAW_PATH)
+    samples = np.loadtxt(road.join(path, "sample.dat"))
+    nums = samples.shape[0]
+    bad_array = np.zeros(nums, dtype=np.bool8)
+    nb_len = len(OUTPUTS)
+    keys = sorted(list(OUTPUTS))
+    output_list = OUTPUTS.copy()
+    output_list.remove('amplitude')
+    output_list.remove('main_frequency')
+    output_list.remove('relaxation_time')
+    output_list.remove('relaxation_time_inf')
+    output_list.remove('relaxation_time_sup')
+
+    results = np.ones((nums, nb_len))
+                                                                         # check whether there is an existing file
+    tmp_file_name = road.join(name_dir, "outputs_in_process.dat")
+    tmp_bad_name = road.join(name_dir, "badarray_in_process.dat")
+    if road.exists(tmp_file_name) and road.exists(tmp_bad_name):
+        print("Loading {}".format(tmp_file_name))
+        print("Loading {}".format(tmp_bad_name))
+        results = np.loadtxt(fname=tmp_file_name)
+        bad_array = np.loadtxt(tmp_bad_name).astype(np.bool8)
+        tmp = np.sum(results, axis=1)==nb_len
+        if tmp.any():
+            first_ind = np.argmax(tmp)
+            print("\nMake outputs from {:d}".format(first_ind))
+        else:
+            first_ind = tmp.size
+            print("\nAll results are already computed.")
+    else:
+        print("No {} found.\nStart from 0.".format(tmp_file_name + " " + tmp_bad_name))
+        first_ind = 0
+
+    print("  {:d} simulations to post process".format(nums-first_ind))
+    f = open(road.join(name_dir, OUT_FILE+'_set0'), "r")
+    lvars = f.readline()
+    f.close()
+    lvars = lvars.split('  ')[:-1]
+    lvars = lvars[0].split(' ') + lvars[1:]
+                                                                         # the parallel loop is here
+
+    args = [
+        [
+            road.join(name_dir, OUT_FILE+'_set{:d}'.format(n)),
+            lvars,
+            output_list,
+            n
+        ]
+        for n in range(first_ind, nums)
+    ]
+
+
+    with Pool(nb_cpu) as pool:
+        for n, is_bad, outputs in pool.imap(make_outputs_multiproc_f, args):
+
+            bad_array[n] = is_bad
+
+            line = []
+            for key in keys:
+                line.append(outputs[key])
+                                                                         # results are stored here
+            results[n, :] = line
+                                                                         # save the temporary file all 10th
+            if (n%10==0) or (n==nums-1):
+                print('   {:d}'.format(n))
+                np.savetxt(fname=tmp_file_name, X=results)
+                np.savetxt(fname=tmp_bad_name, X=bad_array)
+
+    print("  Total execution time for outputs = {:.1f} s".format(timer() - time_start))
+
+    return results, bad_array, keys
+
+def make_outputs_multiproc_f(arg):
+    """
+    The function inside the parallel loop.
+
+    Input
+        arg : list (*)
+            [file_name, ]
+    Ouput
+        n : integer
+            the number of sample
+        is_bad : boolean
+            True if it is a bad attractor
+        outputs : dict (*)
+            the output of observations
+    """
+    file_name = arg[0]
+    lvars = arg[1]
+    output_list = arg[2]
+    n = arg[3]
+                                                                         # load here
+    data = np.loadtxt(file_name, skiprows=1)
+                                                                         # check whether it is bad attracted
+    is_bad = check_bad_attractor(data, lvars)
+                                                                         # extend data
+    lvars, data = extend_IDEE(lvars, data)
+    time = data[:,0]
+    selectamp = (time >= (time[-1]+WINDOW_AMP[0])) * (time <= (time[-1]+WINDOW_AMP[1]))
+
+    outputs = {}
+    if not is_bad:
+        for var in output_list:
+            raw = 100.*data[:, lvars.index(var)]
+                                                                         # computations are here
+            if var=="omega":
+                outs, buffs = comp_observations(time, raw)
+            mean, damp = comp_mean(raw, selectamp)
+            outputs[var] = mean
+
+        outputs["amplitude"] = outs["damp"]
+        outputs["main_frequency"] = outs["main_freq"]
+        outputs["relaxation_time"] = outs["relax_time"]
+        outputs["relaxation_time_inf"] = buffs["relax_times"][0]
+        outputs["relaxation_time_sup"] = buffs["relax_times"][1]
+
+    else:
+        for var in OUTPUTS:
+            outputs[var] = 0.
+
+        outputs["amplitude"] = 0.
+        outputs["main_frequency"] = 0.
+        outputs["relaxation_time"] = 0.
+        outputs["relaxation_time_inf"] = 0.
+        outputs["relaxation_time_sup"] = 0.
+
+    return n, is_bad, outputs
 
 def make_sa_class(Pow=2, names=NAMES, groups=GROUPS, bounds=BOUNDS):
     """
