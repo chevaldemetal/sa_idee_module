@@ -8,7 +8,6 @@ description: This module is can be used to run the sensitivity analysis of the m
 
 TODO:
 
--- paraléliser le programme
 """
                                                                          #--- imports -----------------------
 from sa_idee._libs import *
