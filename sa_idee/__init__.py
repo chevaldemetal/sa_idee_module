@@ -28,6 +28,7 @@ from sa_idee._utils import check_bad_attractor
 
 from sa_idee._plot_func import plot_IDEE
 from sa_idee._plot_func import plot_sa_class
+from sa_idee._plot_func import plot_hierarchy
 from sa_idee._plot_func import plot_histo
 from sa_idee._plot_func import plot_map
 from sa_idee._plot_func import plot_param_phillips

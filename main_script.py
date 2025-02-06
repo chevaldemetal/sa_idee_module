@@ -10,7 +10,7 @@ description: Main script of the code to test SA on IDEE.
 import sys, os
 import sa_idee as sa
 import os.path as road
-print("usage: ipython main_script.py [Power] [Nb CPU]")
+print("usage: ipython main_script.py [Power] [Nb CPU] [first_it]")
 try:
     Pow = int(sys.argv[1])
 except IndexError:
@@ -19,6 +19,11 @@ try:
     nb_cpu = int(sys.argv[2])
 except IndexError:
     nb_cpu = 1
+try:
+    first_it = int(sys.argv[3])
+except IndexError:
+    first_it = 0
+class_already_exists = (first_it>0)
                                                                          # --- macros -----------------------
 """
 parameters and boundes to analyse
@@ -67,8 +72,8 @@ names = [
     "delta",
     "nu",
 
-    "eta",
-    "mu",
+    #"eta",
+    #"mu",
 
     "kappa0",
     "kappa1",
@@ -79,52 +84,52 @@ names = [
     "div0",
     "div1",
 
-    "deltanpop",
-    "npopbar",
+    #"deltanpop",
+    #"npopbar",
 
-    "phi0",
-    "phi1",
-    "gammaw",
+    #"phi0",
+    #"phi1",
+    #"gammaw",
 
-    "phitaylor",
-    "istar",
-    "rstar",
-    "etar",
+    #"phitaylor",
+    #"istar",
+    #"rstar",
+    #"etar",
 ]
 groups = [
-    "K",
-    "K",
+    "full", #"K",
+    "full", #"K",
 
-    "i",
-    "i",
+    #"i",
+    #"i",
 
-    "I",
-    "I",
+    "full", #"I",
+    "full", #"I",
 
-    "p",
-    "p",
+    "full", #"p",
+    "full", #"p",
 
-    "D",
-    "D",
+    "full", #"D",
+    "full", #"D",
 
-    "N",
-    "N",
+    #"N",
+    #"N",
 
-    "P",
-    "P",
-    "P",
+    #"P",
+    #"P",
+    #"P",
 
-    "r",
-    "r",
-    "r",
-    "r",
+    #"r",
+    #"r",
+    #"r",
+    #"r",
 ]
 bounds = [
     [0.035000, 0.045000],
     [2.610000, 3.390000],
 
-    [0.170000, 0.230000],
-    [1.666000, 1.734000],
+    #[0.170000, 0.230000],
+    #[1.666000, 1.734000],
 
     [0.029775, 0.049625],
     [0.539250, 0.898750],
@@ -132,43 +137,52 @@ bounds = [
     [0.007500, 0.012500],
     [0.375000, 0.625000],
 
-    [0.020625, 0.034375],
+    [-0.034375, -0.020625],
     [0.354675, 0.591125],
 
-    [0.020000, 0.080000],
-    [4.662000, 5.418000],
+    #[0.020000, 0.080000],
+    #[4.662000, 5.418000],
 
-    [-0.293752, -0.290248],
-    [0.452585, 0.485415],
-    [0.450000, 0.550000],
+    #[-0.293752, -0.290248],
+    #[0.452585, 0.485415],
+    #[0.450000, 0.550000],
 
-    [0.300000, 0.700000],
-    [0.012000, 0.028000],
-    [0.012000, 0.028000],
-    [2.100000, 3.900000]
+    #[0.300000, 0.700000],
+    #[0.012000, 0.028000],
+    #[0.012000, 0.028000],
+    #[2.100000, 3.900000]
 ]
                                                                          # --- script -----------------------
                                                                          #
                                                                          # 1. Functions to make data for SA
-# 1.1 create a path
-path = sa.check_dir()
+                                                                         # if there is no class to load
+if not class_already_exists:
+    # 1.1 create a path
+    path = sa.check_dir()
 
-# 1.2 initialize a class
-sa_class = sa.make_sa_class(Pow, names, groups, bounds)
-rep = input("\n  Number of samples is {:d}. Continue? Yes (Y) / No (N):\n".format(
-    sa_class.samples.shape[0]))
-if not rep=="Y":
-    os.system("rm -r {}".format(path))
-    sys.exit("You chose to quit.")
+    # 1.2 initialize a class
+    sa_class = sa.make_sa_class(Pow, names, groups, bounds)
+    rep = input("\n  Number of samples is {:d}. Continue? Yes (Y) / No (N):\n".format(
+        sa_class.samples.shape[0]))
+    if not rep=="Y":
+        os.system("rm -r {}".format(path))
+        sys.exit("You chose to quit.")
 
-# 1.3 save the class
-sa.save_sa_class(sa_class, path)
+    # 1.3 save the class
+    sa.save_sa_class(sa_class, path)
+                                                                         # if there is a class to load
+else:
+    # 1.1 ask the path
+    path = input("Enter the path (outputs_* like): ")
+
+    # 1.2 load the class
+    sa_class = sa.load_sa_class(path)
 
 # 1.4 make a set of simulations
 if nb_cpu==1:
-    sa.run_IDEE(sa_class, path)
+    sa.run_IDEE(sa_class, path, fit=first_it)
 else:
-    sa.run_IDEE_multiproc(sa_class, path, nb_cpu)
+    sa.run_IDEE_multiproc(sa_class, path, nb_cpu, fit=first_it)
 
 # 1.5 compute the outputs
 if nb_cpu==1:

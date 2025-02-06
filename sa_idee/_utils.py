@@ -372,3 +372,39 @@ def integrate_pop(deltanpop, npopbar):
     sol = np.column_stack((time, N))
 
     return sol
+
+def comp_nb_groups(c):
+    """
+    Compute the number of groups a sa_class has.
+
+    Input
+        c : salib.util.problem.problemspec
+            class of the library salib
+    Ouput
+        c : salib.util.problem.problemspec
+            class updated with nb_samples
+    """
+    n = len(list(dict.fromkeys(c["groups"])))
+    c["nb_groups"] = n
+
+    return c
+
+def comp_nb_samples(c):
+    """
+    Compute the number of samples a sa_class has.
+
+    Input
+        c : salib.util.problem.problemspec
+            class of the library salib
+    Ouput
+        c : salib.util.problem.problemspec
+            class updated with nb_samples
+    """
+    try:
+        n = c.samples.shape[0]
+    except Exception:
+        n = 0
+    c["nb_samples"] = n
+
+    return c
+

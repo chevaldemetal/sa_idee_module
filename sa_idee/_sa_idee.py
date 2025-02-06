@@ -34,41 +34,6 @@ def check_dir():
 
     return name_dir
 
-def comp_nb_groups(c):
-    """
-    Compute the number of groups a sa_class has.
-
-    Input
-        c : salib.util.problem.problemspec
-            class of the library salib
-    Ouput
-        c : salib.util.problem.problemspec
-            class updated with nb_samples
-    """
-    n = len(list(dict.fromkeys(c["groups"])))
-    c["nb_groups"] = n
-
-    return c
-
-def comp_nb_samples(c):
-    """
-    Compute the number of samples a sa_class has.
-
-    Input
-        c : salib.util.problem.problemspec
-            class of the library salib
-    Ouput
-        c : salib.util.problem.problemspec
-            class updated with nb_samples
-    """
-    try:
-        n = c.samples.shape[0]
-    except Exception:
-        n = 0
-    c["nb_samples"] = n
-
-    return c
-
 def empty_print(a):
     print(a)
     return 1
@@ -462,14 +427,16 @@ def load_sa_class(path):
             the class of the library SAlib
     """
     filename = road.join(path, "sample.dat")
-    sample = np.loadtxt(filename)
+    sample = np.loadtxt(filename, ndmin=2)
     f = open(filename)
     names = f.readline().split(' ')[1:-1]
     groups = f.readline().split(' ')[1:-1]
     f.close()
 
     filename = road.join(path, "bounds.dat")
-    bounds = np.loadtxt(filename)
+    bounds = np.loadtxt(filename, ndmin=2)
+    #if bounds.size==2:
+    #    bounds = np.asarray([[bounds[0], bounds[1]]])
 
     sa_class = ProblemSpec({
         "num_vars":len(names),
@@ -502,7 +469,7 @@ def load_sa_class(path):
 
     return sa_class
 
-def run_IDEE(sa_class, path):
+def run_IDEE(sa_class, path, fit=0):
     """
     This function makes a serie of runs of the model IDEE.
 
@@ -511,6 +478,8 @@ def run_IDEE(sa_class, path):
             the class of the library SAlib
         path : string
             the  directory where to save IDEE's outputs
+        fit : integer
+            first iteration to compute
     """
                                                                          # define a global timer
     time_start = timer()
@@ -520,8 +489,9 @@ def run_IDEE(sa_class, path):
         os.mkdir(name_dir)
                                                                          # run the model
     names = sa_class["names"]
+    samples = sa_class.samples[fit:,:]
     loop_times = []
-    for n, sample in enumerate(sa_class.samples):
+    for n, sample in enumerate(samples, fit):
         loop_time_start = timer()
         print("\n--- {:d} / {:d} ---".format(n+1, nbmax))
         params = dict(zip(names, sample))
@@ -532,7 +502,7 @@ def run_IDEE(sa_class, path):
     print("\n  Mean execution of solving IDEE = {:.1e} s".format(mean_time_loop))
     print("  Total execution time = {:.1f} s".format(timer() - time_start))
 
-def run_IDEE_multiproc(sa_class, path, nb=4):
+def run_IDEE_multiproc(sa_class, path, nb=4, fit=0):
     """
     Parallel version of the function run_IDEE.
 
@@ -543,6 +513,8 @@ def run_IDEE_multiproc(sa_class, path, nb=4):
             the  directory where to save IDEE's outputs
         nb : integer
             number of CPU used
+        fit : integer
+            first iteration to compute
     """
 
     time_start = timer()
@@ -553,8 +525,7 @@ def run_IDEE_multiproc(sa_class, path, nb=4):
                                                                          # run the model
     names = sa_class["names"]
                                                                          # parralel loop is here
-    nb_samples = sa_class.samples.shape[0]
-    args = [[dict(zip(names, sa_class.samples[n])), n, name_dir] for n in range(nb_samples)]
+    args = [[dict(zip(names, sa_class.samples[n])), n, name_dir] for n in range(fit, nbmax)]
 
     with Pool(nb) as pool:
         for n in pool.imap(run_IDEE_multiproc_f, args):

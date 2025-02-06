@@ -34,6 +34,7 @@ PIm, PIa = 19., 10.
 LAMm, LAMa = 74., 6.
 KAPPAm, KAPPAa = 19., 10.
 OMEGAm, OMEGAa = 65., 7.
+alphabet = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
                                                                          # --- functions --------------------
 def perso_savefig(fig, path, figure_name, show):
     """
@@ -60,7 +61,354 @@ def perso_savefig(fig, path, figure_name, show):
         plt.show()
     plt.close(fig)
 
-def plot_histo(c, path, n_bins=100, figsize=(15,10), figure_name="histograms.pdf", show=False):
+def plot_hierarchy(c, figsize=(10,10), shrink=0.72, steps=[[0.5, 0.5], [0.5, 0.5]], skip_outs=["relaxation_time_inf", "relaxation_time_sup"], path='.'):
+    """
+    Plot a hierarchy of groups or params based on the analysis.
+
+    Input
+        c : SALib.util.problem.ProblemSpec
+            class of the library SAlib
+        figsize : tuple (float)
+            figure size in inches
+        shrink : float
+            scale on the length of the colorbar
+        steps : list (list (float))
+            steps of legends
+        path : string
+            path of the data
+    Output
+        tmp_names : list (string)
+            the list of names in the right order
+    """
+    analysis = c._analysis
+    names = list(analysis.keys())
+    numv = len(names)
+    out_analysis = list(analysis[names[0]].keys())
+    resv, confs = {}, {}
+                                                                         # make and sort data
+    for n in names:
+        for out in out_analysis:
+            if out=="ST":
+                resv[n] = analysis[n][out]
+            elif out=="ST_conf":
+                confs[n] = analysis[n][out]
+                                                                         # check wether there is one or
+                                                                         # multiple groups and change for params
+                                                                         # otherwise
+    tmp_g_names = set(c["groups"])
+    g_names = []
+    for n in c["groups"]:
+        if n in tmp_g_names:
+            tmp_g_names.remove(n)
+            g_names.append(n)
+
+    if len(g_names)==1:
+        g_names = c["names"]
+        print("working by params")
+    else:
+        g_names = list(g_names)
+        print("working by groups")
+
+    nbn = len(g_names)
+    r = nbn*(nbn-1)/2
+    vals = pd.DataFrame(data=-np.ones((nbn*numv+1,nbn), dtype=np.int64), columns=g_names)
+    vals = vals.assign(groups=g_names*numv+[''])
+    vals = vals.assign(outputs=np.repeat(names, nbn).tolist()+['total robustness'])
+    vals = vals.set_index(keys=['outputs', 'groups'])
+    tab_ordre = {}
+    full_ordre = np.zeros(nbn)
+                                                                         # compute the differences with confident intervals
+    for n in names:
+
+        order = np.argsort(resv[n])[::-1]
+        if not ((n==skip_outs[1]) or (n==skip_outs[0])):
+           full_ordre += order
+        tab_ordre[n] = [g_names[kkk] for kkk in order]
+
+        for i in range(nbn):
+            for ii in range(i+1, nbn):
+                np0, np1 = g_names[i], g_names[ii]
+                conf_tot = max(0, confs[n][i]) + max(0, confs[n][ii])
+                vals.loc[n, g_names[i]][g_names[ii]] = int(abs(resv[n][i] - resv[n][ii]) / conf_tot)
+
+                                                                         # modify for printing
+    full_ordre = np.argsort(full_ordre)
+    eqm1 = vals.eq(-1)
+    ge3 = vals.ge(2)
+    vals[eqm1] = ''
+    vals[ge3] = 2
+
+    vals = vals.assign(nb_of_2=0)
+    vals = vals.assign(nb_of_1=0)
+    vals = vals.assign(nb_of_0=0)
+    vals = vals.assign(robustness_2='')
+    vals = vals.assign(robustness_1='')
+    vals = vals.assign(robustness_0='')
+                                                                         # computes the averages
+    moy2, moy1, moy0 = 0, 0, 0
+    for n in names:
+        for i in range(nbn):
+            nb2 = np.count_nonzero(vals.loc[(n, g_names[i]), g_names] == 2)
+            nb1 = np.count_nonzero(vals.loc[(n, g_names[i]), g_names] == 1)
+            nb0 = np.count_nonzero(vals.loc[(n, g_names[i]), g_names] == 0)
+
+            vals.loc[(n, g_names[i]), 'nb_of_2'] = nb2
+            vals.loc[(n, g_names[i]), 'nb_of_1'] = nb2 + nb1
+            vals.loc[(n, g_names[i]), 'nb_of_0'] = nb0
+
+        tmp_moy2 = round(100*np.sum(vals.loc[n]['nb_of_2'])/r,1)
+        tmp_moy1 = round(100*np.sum(vals.loc[n]['nb_of_1'])/r,1)
+        tmp_moy0 = round(100*np.sum(vals.loc[n]['nb_of_0'])/r,1)
+
+        vals.loc[(n, g_names[0]), 'robustness_2'] = tmp_moy2
+        vals.loc[(n, g_names[0]), 'robustness_1'] = tmp_moy1
+        vals.loc[(n, g_names[0]), 'robustness_0'] = tmp_moy0
+        moy2 += tmp_moy2
+        moy1 += tmp_moy1
+        moy0 += tmp_moy0
+
+    moy2 = (moy2 - (vals.loc[(skip_outs[1], g_names[0]), 'robustness_2'] + vals.loc[(skip_outs[0], g_names[0]), 'robustness_2']))/(numv-2)
+    moy1 = (moy1 - (vals.loc[(skip_outs[1], g_names[0]), 'robustness_1'] + vals.loc[(skip_outs[0], g_names[0]), 'robustness_1']))/(numv-2)
+    moy0 = (moy0 - (vals.loc[(skip_outs[1], g_names[0]), 'robustness_0'] + vals.loc[(skip_outs[0], g_names[0]), 'robustness_0']))/(numv-2)
+
+    vals.loc[('total robustness', '')] = ['']*(nbn+3) + [round(moy2,1), round(moy1,1), round(moy0,1)]
+
+                                                                         # make a figure
+                                                                         # prepare data
+    tmp_names = names.copy()
+    tmp_names.remove(skip_outs[1])
+    tmp_names.remove(skip_outs[0])
+
+    numv2 = len(tmp_names)
+    nc = 4
+    nr = (numv2//nc) if (numv2%nc==0) else (numv2//nc+1)
+                                                                         ##########
+                                                                         # figure #
+    fig, axes = plt.subplots(nrows=nr, ncols=nc, figsize=figsize)
+    cmap = ListedColormap(["firebrick", "green", "limegreen"])
+    props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+    colors_prct = {
+        10:"limegreen",
+        9:"limegreen",
+        8:"green",
+        7:"yellow",
+        6:"orange",
+        5:"red",
+        4:"red",
+        3:"red",
+        2:"red",
+        1:"red",
+        0:"red",
+    }
+                                                                         # set the order by decreasing robustness
+    prcts = []
+    for i in range(nr):
+        for j in range(nc):
+            if not i*nc+j+1>numv2:
+                prct = vals.loc[(tmp_names[i*nc+j],g_names[0]),"robustness_1"]
+                prcts.append(prct)
+
+    argsort = np.argsort(prcts)
+    tmp_names = [tmp_names[i] for i in argsort[::-1]]
+                                                                         # loop where we plot
+    for k in range(axes.size):
+
+        i, j = k//nr, k%nc
+        ax = axes[i,j]
+
+        if not i*nc+j+1>numv2:
+
+            nn = tmp_names[k]
+            tabb = vals.loc[(nn, g_names), g_names]._values
+            tabb[tabb==''] = np.nan
+            tabb = tabb.astype(np.float64)
+            ax.imshow(X=tabb.T, vmin=0., cmap=cmap)
+                                                                         # colorbar and order
+            r0 = vals.loc[(nn, g_names[0]), "robustness_0"]
+            r1 = vals.loc[(nn, g_names[0]), "robustness_1"]
+            r2 = vals.loc[(nn, g_names[0]), "robustness_2"]
+
+            rrr = r0 + r1 - r2
+            rrr = (r0 + 0.02) if rrr==100. else rrr
+            bounds = [
+                -0.01,
+                r0 + 0.01,
+                max(rrr, r0 + 0.01),
+                100.03
+            ]
+            norm = BoundaryNorm(bounds, cmap.N)
+            cx = fig.colorbar(
+                cm.ScalarMappable(cmap=cmap, norm=norm), 
+                ax=ax,
+                location='top',
+                shrink=shrink, 
+                pad=0.025,
+                spacing='proportional',
+                boundaries=bounds, 
+                format="%d",
+                label='order: ' + ' - '.join(tab_ordre[nn]),
+            )
+            cx.ax.tick_params(top=False, labeltop=False)
+                                                                         # ticks
+            xt = ax.get_xlim()
+            yt = ax.get_ylim()
+            dx, dy = (xt[-1]-xt[0])/2/nbn, (yt[-1]-yt[0])/2/nbn
+
+            x_lsp = np.linspace(xt[0]+dx, xt[-1]-dx, nbn)
+            y_lsp = np.linspace(yt[0]+dy, yt[-1]-dy, nbn)
+
+            props["facecolor"] = "white"
+            ax.text(
+                0.95, 0.825,
+                tmp_names[i*nc+j],
+                transform=ax.transAxes,
+                fontsize='medium',
+                verticalalignment='top',
+                horizontalalignment='right',
+                bbox=props
+            )
+
+            prct = vals.loc[(tmp_names[i*nc+j],g_names[0]),"robustness_1"]
+            props["facecolor"] = colors_prct[prct//10]
+            ax.text(
+                0.95, 0.95,
+                "r = {:.1f} %".format(prct),
+                transform=ax.transAxes,
+                fontsize='medium',
+                verticalalignment='top',
+                horizontalalignment='right',
+                bbox=props
+            )
+
+            ax.text(
+                1.02, 1.14,
+                "({})".format(alphabet[k]),
+                transform=ax.transAxes,
+                fontsize='medium',
+                verticalalignment='top',
+                horizontalalignment='left',
+            )
+
+        elif i*nc+j+1==numv2+1:
+
+            ntabrow = tabb.shape[0]//3
+            tabb[:,:] = np.nan
+            tabb[-3*ntabrow:,0] = [2]*ntabrow + [1]*ntabrow + [0]*ntabrow
+            ax.imshow(X=tabb, vmin=0., cmap=cmap)
+                                                                         # colorbar
+            cx = fig.colorbar(
+                cm.ScalarMappable(cmap=cmap, norm=norm), 
+                ax=ax,
+                location='top',
+                shrink=shrink, 
+                pad=0.025,
+                spacing='proportional',
+                boundaries=bounds, 
+                format="%d",
+                label=' - '.join(tab_ordre[nn]),
+                alpha=0.
+            )
+            cx.ax.tick_params(top=False, labeltop=False)
+            cx.ax.axis("off")
+
+            for jk in range(3):
+
+                ax.text(
+                    steps[0][0], (jk+0.5)*steps[0][1],
+                    "{:d}".format(jk),
+                    transform=ax.transAxes,
+                    fontsize='medium',
+                    verticalalignment='bottom',
+                    horizontalalignment='left',
+                )
+
+            ax.text(
+                steps[0][0]+0.1, 2*steps[0][1],
+                "number of\nconfidence\nintervals",
+                transform=ax.transAxes,
+                fontsize='medium',
+                verticalalignment='center',
+                horizontalalignment='left',
+            )
+            #ax.text(
+            #    0.65, 1.,
+            #    'final order:\n' + ' '.join([g_names[i] for i in full_ordre]),
+            #    transform=ax.transAxes,
+            #    fontsize='medium',
+            #    verticalalignment='top',
+            #    horizontalalignment='center',
+            #    bbox=dict(boxstyle='round', facecolor='white', alpha=0.5)
+            #)
+
+            ax.axis("off")
+            ax = axes[i-1,j]
+
+        elif i*nc+j+1==numv2+2:
+
+            maxtab = min(tabb.shape[0], 5)
+            ntabrow = tabb.shape[0]//maxtab
+            tabb[:,:] = np.nan
+            tabb[-maxtab*ntabrow:, 0] = np.repeat([i for i in range(maxtab)], ntabrow)
+            cmap2 = ListedColormap([
+                "limegreen",
+                "green",
+                "yellow",
+                "orange",
+                "red"
+            ])
+            ax.imshow(X=tabb, vmin=0., cmap=cmap2)
+                                                                         # colorbar
+            cx = fig.colorbar(
+                cm.ScalarMappable(cmap=cmap, norm=norm), 
+                ax=ax,
+                location='top',
+                shrink=shrink, 
+                pad=0.025,
+                spacing='proportional',
+                boundaries=bounds, 
+                format="%d",
+                label=' - '.join(tab_ordre[nn]),
+                alpha=0.
+            )
+            cx.ax.tick_params(top=False, labeltop=False)
+            cx.ax.axis("off")
+
+            ltmp = [100-10*i for i in range(maxtab)]
+            for jk, jkk in enumerate(ltmp[::-1]):
+
+                ax.text(
+                    steps[1][0], (jk+0.5)*steps[1][1],
+                    "{:d}".format(jkk),
+                    transform=ax.transAxes,
+                    fontsize='medium',
+                    verticalalignment='bottom',
+                    horizontalalignment='left',
+                )
+
+            ax.text(
+                steps[1][0]+0.15, 3.5*steps[1][1],
+                r"$r$ : " + "mean\nrobustness\nof the order\nby output",
+                transform=ax.transAxes,
+                fontsize='medium',
+                verticalalignment='center',
+                horizontalalignment='left',
+            )
+            
+            ax.axis("off")
+            ax = axes[i-1,j]
+
+        ax.set_xticks(x_lsp)
+        ax.set_yticks(y_lsp)
+        ax.set_xticklabels(g_names, rotation=45, ha='right')
+        ax.set_yticklabels(g_names[::-1])
+
+    plt.tight_layout(pad=0.)
+    plt.savefig(fname=os.path.join(path, "hierarchy.svg"))
+    plt.close(fig)
+
+    return tmp_names
+
+def plot_histo(c, path, n_bins=100, figsize=(15,10), figure_name="histo.svg", skip_outs=["relaxation_time_inf", "relaxation_time_sup"], order_names='', show=False):
     """
     Plot histograms of results.
 
@@ -77,6 +425,10 @@ def plot_histo(c, path, n_bins=100, figsize=(15,10), figure_name="histograms.pdf
             figure size
         figure_name : string
             file name
+        skip_outs : list (string)
+            the two outputs to remove
+        order_names : list (string)
+            the order of names
         show : boolean
             if True, show else save figure
     """
@@ -91,10 +443,35 @@ def plot_histo(c, path, n_bins=100, figsize=(15,10), figure_name="histograms.pdf
         print("Cannot draw histograms without results.")
         pass
                                                                          # plot histograms
+    select = np.ones(c.results.shape[0], dtype=np.bool) 
+
+    EPS = 1.E-4 
+    VAL = 15.
+    select = np.logical_not((c.results[:,5] > VAL-EPS)*(c.results[:,5] < VAL+EPS))
+    select = select * (c.results[:,1] > EPS)
+    print(np.count_nonzero(select)/s*100)
+
+    outputs = c["outputs"]
+    if order_names=='':
+        sublist_outputs = outputs.copy()
+    else:
+        sublist_outputs = order_names.copy()
+
+    for skip in skip_outs:
+        try:
+            sublist_outputs.remove(skip)
+        except ValueError:
+            print("no {} in list".format(skip))
+
     fig, axes = plt.subplots(nbrows, nbcols, figsize=figsize)
-    for n, out in enumerate(c["outputs"]):
-        i, j = n//nbcols, n%nbcols
-        raw = c.results[:, n]
+    props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+
+    for m, out in enumerate(sublist_outputs):
+        n = outputs.index(out)
+        print(n, out)
+        i, j = m//nbcols, m%nbcols
+        #raw = c.results[:, n] 
+        raw = c.results[select, n]
         ax = axes[i, j]
                                                                          # postdata process
         std = np.nanstd(raw)
@@ -109,10 +486,36 @@ def plot_histo(c, path, n_bins=100, figsize=(15,10), figure_name="histograms.pdf
             color=line.get_color(),
             linestyle=line.get_linestyle()
         )
-        ax.set_ylabel(out)
-        #ax.set_ylim(bottom=0.1*s)
+        ax.set_xlabel(out)
+        ax.text(
+            1.02, 1.02,
+            "({})".format(alphabet[m]),
+            transform=ax.transAxes,
+            fontsize='medium',
+            verticalalignment='top',
+            horizontalalignment='left',
+        )
 
+    for n in range(m+1, nbrows*nbcols):
+        ax = axes[n//nbcols, n%nbcols]
+        ax.axis("off")
+
+    axes[0,2].set_ylim(0, 5500)
     perso_savefig(fig, path, figure_name, show)
+
+    #new_class = ProblemSpec({
+    #    "num_vars":c["num_vars"],
+    #    "names":c["names"],
+    #    "groups":c["groups"],
+    #    "bounds":c["bounds"],
+    #    "outputs":c["outputs"]
+    #})
+    #new_class.set_samples(c.samples[select])
+    #new_class.set_results(c.results[select])
+    #new_class = comp_nb_samples(new_class)
+    #new_class = comp_nb_groups(new_class)
+    #
+    #return new_class
 
 def plot_main_details_IDEE(time, raw):
     """
@@ -466,7 +869,7 @@ def plot_IDEE(path, file_name, figure_name="omega.pdf", figure_name_all="all.pdf
 
             mean = mean if not is_bad else np.nan
             raw[ylim_year:] = raw[ylim_year]
-            line1, line2, = ax.plot(time, raw, time, mean*np.ones(time.size), 
+            line1, line2, = ax.plot(time, raw, time, mean*np.ones(time.size),
                 linestyle=ls, label=r"${}$".format(PLOT_LIST[var]))
 
             if var=="npop":
@@ -590,7 +993,7 @@ def plot_param_aa(name, dval, start, stop):
         max(start, stop)
     ))
 
-def plot_param_adot(radalpha=0.25, radkv=0.25, c=Gm/100, win=0.01, nb=5):
+def plot_param_adot(radalpha=0.25, radkv=0.25, c=Gm/100, win=0.01, nb=5, axes=''):
     """
     Plot the productivity growth.
     gdp growth rate
@@ -609,6 +1012,8 @@ def plot_param_adot(radalpha=0.25, radkv=0.25, c=Gm/100, win=0.01, nb=5):
             window width
         nb : integer
             number of lines
+        axes : pyplot Axes
+            pre existing axes
     """
     b_a = {"start":(1.-radalpha)*ALPHAC, "stop":(1.+radalpha)*ALPHAC}
     b_k = {"start":(1.-radkv)*KVC, "stop":(1.+radkv)*KVC}
@@ -617,16 +1022,27 @@ def plot_param_adot(radalpha=0.25, radkv=0.25, c=Gm/100, win=0.01, nb=5):
     kvl = np.linspace(**b_k, num=nb)
 
     t = np.linspace(0., 1000, 1000)
-    g = (Gm + Ga * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
-    select = (g>(c-win)) * (g<(c+win))
+    g = (Gm + Ga * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))
+    select = (g/100>(c-win)) * (g/100<(c+win))
 
-    fig, axes = plt.subplots(nrows=3)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=3, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*3)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
     axes[2].plot(t, g)
 
     means = []
     for alpha in alphal:
         for kv in kvl:
-            dat = alpha + kv*g
+            dat = 100*(alpha + kv*g/100)
             axes[0].plot(
                 g,
                 dat,
@@ -641,29 +1057,31 @@ def plot_param_adot(radalpha=0.25, radkv=0.25, c=Gm/100, win=0.01, nb=5):
             )
             means.append(np.mean(dat[select]))
 
-    dat = ALPHAC + KVC*g
+    dat = 100*(ALPHAC + KVC*g/100)
     axes[0].plot(
         g,
-        ALPHAC + KVC*g,
+        100*(ALPHAC + KVC*g/100),
         color="r",
         linestyle="-"
     )
     axes[1].plot(
         t,
-        ALPHAC + KVC*g,
+        100*(ALPHAC + KVC*g/100),
         color="r",
         linestyle="-"
     )
     tip_val = np.mean(dat[select])
 
     ylims = axes[0].get_ylim()
-    axes[0].fill_between([c-win, c+win], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
-    axes[0].set_xlabel(r"growth rate ($g$)")
-    axes[0].set_ylabel(r"productivity growth ($\dot{a}/a$)")
-    axes[1].set_xlabel(r"time ($t$)")
-    axes[1].set_ylabel(r"productivity growth ($\dot{a}/a$)")
-    axes[2].set_ylabel(r"growth rate ($g$)")
-    axes[2].set_xlabel(r"time ($t$)")
+    axes[0].fill_between([100*(c-win), 100*(c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    axes[0].set_xlabel(r"growth rate $g$ (%)")
+    axes[0].set_ylabel(r"productivity" + '\n' + "growth rate $\dot{a}/a$ (%)")
+    #axes[1].set_xlabel(r"time ($t$)")
+    #axes[1].tick_params(labelbottom=False)
+    axes[1].tick_params(labelbottom=False)
+    axes[1].set_ylabel(r"productivity" + '\n' + "growth rate $\dot{a}/a$ (%)")
+    axes[2].set_ylabel(r"growth rate $g$ (%)")
+    axes[2].set_xlabel(r"time $t$ (y)")
 
     for ax in axes[:-1]:
         ax.plot(
@@ -677,41 +1095,195 @@ def plot_param_adot(radalpha=0.25, radkv=0.25, c=Gm/100, win=0.01, nb=5):
     plot_param_aa("alpha", ALPHAC, **b_a)
     plot_param_aa("kaldoor-verdon", KVC, **b_k)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("adot.pdf", bbox_inches='tight')
+        plt.close(fig)
 
 def plot_param_all():
     """
     Plot all param functions.
     """
-    print("\n  Productivity growth")
-    plot_param_adot()
-    print("\n  Central Bank interest rate")
-    plot_param_CB_interest_rate()
-    print("\n  Delta nu")
-    plot_param_deltanu()
-    print("\n  Dividends")
-    plot_param_dividends()
-    print("\n  Gamma")
-    plot_param_Gamma()
-    print("\n  Gammaw")
-    plot_param_gammaw()
-    print("\n  Inflation")
-    plot_param_inflation()
-    print("\n  Investment")
-    plot_param_investment()
-    print("\n  Phillips")
-    plot_param_phillips()
-    print("\n  Population")
-    plot_param_population()
+                                                                         # first figure
+    nrows, ncols = 3, 3
+    fig = plt.figure(figsize=(8, 5))
+    G = GridSpec(nrows=nrows, ncols=ncols, figure=fig, width_ratios=[1, 1, 1], height_ratios=[1]*nrows)
 
-def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=Im/100, win0=0.01, c1=62.25, win1=5, nb0=5, nb1=5):
+    i, j = 0, 0
+    axes = [fig.add_subplot(G[i*ncols + j])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+
+    totalaxes = axes.copy()
+
+    print("\n  Productivity growth")
+    plot_param_adot(axes=axes)
+
+    i, j = 0, 1
+    axes = [fig.add_subplot(G[i*ncols + j])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+
+    totalaxes += axes
+
+    print("\n  Central Bank interest rate")
+    plot_param_CB_interest_rate(axes=axes)
+
+    i, j = 0, 2
+    axes = [fig.add_subplot(G[i*ncols + j])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+
+    totalaxes += axes
+
+    print("\n  Delta nu")
+    plot_param_deltanu(axes=axes)
+
+    for i, ax in enumerate(totalaxes):
+        ax.text(
+            1.02, 1.02,
+            "({})".format(alphabet[i]),
+            transform=ax.transAxes,
+            fontsize='medium',
+            verticalalignment='top',
+            horizontalalignment='left',
+       )
+
+    G.tight_layout(fig)
+    plt.savefig("rall.svg", bbox_inches='tight')
+    plt.close(fig)
+                                                                         # second figure
+    fig = plt.figure(figsize=(8, 5))
+    G = GridSpec(nrows=nrows, ncols=ncols, figure=fig, width_ratios=[1, 1, 1], height_ratios=[1]*nrows)
+
+    i, j = 0, 0
+    axes = [fig.add_subplot(G[i*ncols + j])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+
+    totalaxes = axes.copy()
+
+    print("\n  Dividends")
+    plot_param_dividends(axes=axes)
+
+    i, j = 0, 1
+    axes = [fig.add_subplot(G[i*ncols + j])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+
+    totalaxes += axes
+
+    print("\n  Phillips")
+    plot_param_phillips(axes=axes)
+
+    i, j = 0, 2
+    axes = [fig.add_subplot(G[i*ncols + j])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+
+    totalaxes += axes
+
+    print("\n  Gammaw")
+    plot_param_gammaw(axes=axes)
+
+    for i, ax in enumerate(totalaxes):
+        ax.text(
+            1.02, 1.02,
+            "({})".format(alphabet[i]),
+            transform=ax.transAxes,
+            fontsize='medium',
+            verticalalignment='top',
+            horizontalalignment='left',
+       )
+
+    G.tight_layout(fig)
+    plt.savefig("rall2.svg", bbox_inches='tight')
+    plt.close(fig)
+                                                                         # third figure
+    nrows, ncols = 5, 3
+    fig = plt.figure(figsize=(8, 7))
+    G = GridSpec(nrows=nrows, ncols=ncols, figure=fig, width_ratios=[1, .5, .5], height_ratios=[1]*nrows)
+
+    i, j = 0, 0
+    axes = [fig.add_subplot(G[i*ncols + j])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+    i = 3
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+    i = 4
+    axes.append(fig.add_subplot(G[i*ncols + j], sharex=axes[1]))
+
+    totalaxes = axes.copy()
+
+    print("\n  Investment")
+    plot_param_investment(axes=axes)
+
+    i, j = 0, 1
+    axes = [fig.add_subplot(G[i*ncols + j:i*ncols + j + 2])]
+    i = 1
+    axes.append(fig.add_subplot(G[i*ncols + j:i*ncols + j + 2]))
+    i = 2
+    axes.append(fig.add_subplot(G[i*ncols + j:i*ncols + j + 2], sharex=axes[1]))
+    i = 3
+    axes.append(fig.add_subplot(G[i*ncols + j:i*ncols + j + 2], sharex=axes[1]))
+
+    totalaxes += axes
+
+    print("\n  Inflation")
+    plot_param_inflation(axes=axes)
+
+    i = 4
+    ax = fig.add_subplot(G[i*ncols + j])
+
+    totalaxes += [ax]
+
+    print("\n  Gamma")
+    plot_param_Gamma(ax=ax)
+
+    j = 2
+    ax = fig.add_subplot(G[i*ncols + j])
+
+    totalaxes += [ax]
+
+    print("\n  Population")
+    plot_param_population(ax=ax)
+
+    for i, ax in enumerate(totalaxes):
+        ax.text(
+            1.02, 1.02,
+            "({})".format(alphabet[i]),
+            transform=ax.transAxes,
+            fontsize='medium',
+            verticalalignment='top',
+            horizontalalignment='left',
+       )
+
+    G.tight_layout(fig)
+    plt.savefig("rall3.svg", bbox_inches='tight')
+    plt.close(fig)
+
+def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=Im/100, win0=0.01, c1=62.25, win1=5, nb0=5, nb1=5, axes=''):
     """
     plot central bank interest rate
     inflation
         https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG?locations=1W
     interest rate
-        https://data.worldbank.org/indicator/FR.INR.LEND?locations=US-CN-IN-GB&view=chart 
+        https://data.worldbank.org/indicator/FR.INR.LEND?locations=US-CN-IN-GB&view=chart
 
     Input
     """
@@ -731,8 +1303,19 @@ def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=Im/10
     i = (Im + Ia * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
     select0 = (i>(c0-win0)) * (i<(c0+win0))
 
-    fig, axes = plt.subplots(nrows=3)
-    axes[2].plot(t, i)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=3, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*3)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
+    axes[2].plot(t, 100*i)
 
     means0 = []
     means1 = []
@@ -740,42 +1323,43 @@ def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=Im/10
         for istar in istarl:
             for rstar in rstarl:
                 rcb = np.maximum(0., rstar + i + phi*(i - istar))
-                axes[0].plot(i, rcb, color="k", linestyle="-")
-                axes[1].plot(t, rcb, color="k", linestyle="-")
+                axes[0].plot(100*i, 100*rcb, color="k", linestyle="-")
+                axes[1].plot(t, 100*rcb, color="k", linestyle="-")
                 means0.append(np.mean(rcb[select0]))
-    
+
     rcb = np.maximum(0., RSTAR + i + PHITAYLOR*(i - ISTAR))
     tmaxrcb = t[np.argmax(rcb[select1])]
-    axes[0].plot(i, rcb, color="r", linestyle="-")
-    axes[1].plot(t, rcb, color="r", linestyle="-")
+    axes[0].plot(100*i, 100*rcb, color="r", linestyle="-")
+    axes[1].plot(t, 100*rcb, color="r", linestyle="-")
     for etar in etarl:
         rb = np.zeros(t.size)
         rb[0] = RB0
         for n, tt in enumerate(t[:-1]):
                                                                          # time step is one year here
             rb[n+1] = rb[n] + dt/etar * (rcb[n] - rb[n])
-        axes[1].plot(t, rb, color="gray", linestyle="-", alpha=0.5)
+        axes[1].plot(t, 100*rb, color="gray", linestyle="-", alpha=0.5)
         means1.append(
             abs(tmaxrcb - t[np.argmax(rb[select1])])
         )
 
     for n, tt in enumerate(t[:-1]):
         rb[n+1] = rb[n] + dt/ETAR * (rcb[n] - rb[n])
-    axes[1].plot(t, rb, color="r", linestyle="--")
+    axes[1].plot(t, 100*rb, color="r", linestyle="--")
     tip_val0 = np.mean(rcb[select0])
     tip_val1 = abs(tmaxrcb - t[np.argmax(rb[select1])])
 
     ylims = axes[0].get_ylim()
-    axes[0].fill_between([(c0-win0), (c0+win0)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    axes[0].fill_between([100*(c0-win0), 100*(c0+win0)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
     ylims = axes[1].get_ylim()
-    axes[1].fill_between([(c1-win1), (c1+win1)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    #axes[1].fill_between([100*(c1-win1), 100*(c1+win1)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
-    axes[0].set_xlabel(r"inflation ($i$)")
-    axes[0].set_ylabel(r"central bank interest rate ($r_{cb}$)")
-    axes[1].set_xlabel(r"time ($t$)")
-    axes[1].set_ylabel(r"central bank interest rate ($r_{cb}$)")
-    axes[2].set_ylabel(r"inflation ($i$)")
-    axes[2].set_xlabel(r"time ($t$)")
+    axes[0].set_xlabel(r"inflation rate $i$ (%)")
+    axes[0].set_ylabel(r"central bank interest" + '\n' + "rate $r_{cb}$ (%)")
+    #axes[1].set_xlabel(r"time ($t$)")
+    axes[1].tick_params(labelbottom=False)
+    axes[1].set_ylabel(r"central bank interest" + '\n' + "rate $r_{cb}$ (%)")
+    axes[2].set_ylabel(r"inflation rate $i$ (%)")
+    axes[2].set_xlabel(r"time $t$ (y)")
 
     print("\nwindow size = {:.1f} %".format((np.max(means0)-np.min(means0))/tip_val0*100))
     plot_param_aa("phistar", PHITAYLOR, **a)
@@ -785,10 +1369,13 @@ def plot_param_CB_interest_rate(rad0=0.4, rad1=0.4, rad2=0.4, rad3=0.3, c0=Im/10
     print("\nwindow size = {:.1f} %".format((np.max(means1)-np.min(means1))/tip_val1*100))
     plot_param_aa("etar", ETAR, **d)
 
-    plt.show()
-    plt.close(fig)
+    #plt.show()
+    if pre_axes:
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("CB.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_deltanu(rad0=0.125, rad1=0.13, c=KAPPAm/100, win=0.02, nb=5):
+def plot_param_deltanu(rad0=0.125, rad1=0.13, c=KAPPAm/100, win=0.02, nb=5, axes=''):
     """
     Plot delta and nu parameters.
 
@@ -839,6 +1426,7 @@ def plot_param_deltanu(rad0=0.125, rad1=0.13, c=KAPPAm/100, win=0.02, nb=5):
     Input
         rad0: float
         rad1 : float
+        axes : numpy.ndarray (Axe)
     """
 
     a = {"start":(1.-rad0)*DELTA, "stop":(1.+rad0)*DELTA}
@@ -851,59 +1439,74 @@ def plot_param_deltanu(rad0=0.125, rad1=0.13, c=KAPPAm/100, win=0.02, nb=5):
     kappa = (KAPPAm + KAPPAa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
     select = (kappa>(c-win)) * (kappa<(c+win))
 
-    fig, axes = plt.subplots(nrows=3)
-    axes[2].plot(t, kappa)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=3, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*3)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
+    axes[2].plot(t, 100*kappa)
 
     means = []
     for delta in deltal:
         for nu in nul:
             g = kappa / nu - delta
             axes[0].plot(
-                kappa,
-                g,
+                100*kappa,
+                100*g,
                 linestyle="-",
                 color="k"
             )
             axes[1].plot(
                 t,
-                g,
+                100*g,
                 linestyle="-",
                 color="k"
             )
             means.append(np.mean(g[select]))
     g = kappa / NU - DELTA
     axes[0].plot(
-        kappa,
-        g,
+        100*kappa,
+        100*g,
         linestyle="-",
         color="r"
     )
     axes[1].plot(
         t,
-        g,
+        100*g,
         linestyle="-",
         color="r"
     )
     tip_val = np.mean(g[select])
 
     ylims = axes[0].get_ylim()
-    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    axes[0].fill_between([100*(c-win), 100*(c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
-    axes[0].set_xlabel(r"investment ratio (\kappa$)")
-    axes[0].set_ylabel(r"growth rate ($g$)")
-    axes[1].set_xlabel(r"time ($t$)")
-    axes[1].set_ylabel(r"growth rate ($g$)")
-    axes[2].set_ylabel(r"investment ratio ($\kappa$)")
-    axes[2].set_xlabel(r"time ($t$)")
+    axes[0].set_xlabel(r"investment ratio $\kappa$ (%)")
+    axes[0].set_ylabel(r"growth rate $g$ (%)")
+    #axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel(r"growth rate $g$ (%)")
+    axes[1].tick_params(labelbottom=False)
+    axes[2].set_ylabel(r"investment ratio $\kappa$ (%)")
+    axes[2].set_xlabel(r"time $t$ (y)")
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
     plot_param_aa("delta", DELTA, **a)
     plot_param_aa("nu", NU, **b)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("deltanu.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_dividends(rad0=0.25, rad1=0.25, c=PIm/NU/100, win=0.005, nb=5):
+def plot_param_dividends(rad0=0.25, rad1=0.25, c=PIm/NU/100, win=0.005, nb=5, axes=''):
     """
     Plot dividend functions
     dividends
@@ -935,8 +1538,19 @@ def plot_param_dividends(rad0=0.25, rad1=0.25, c=PIm/NU/100, win=0.005, nb=5):
 
     select = (smallpik>(c-win)) * (smallpik<(c+win))
 
-    fig, axes = plt.subplots(nrows=3)
-    axes[2].plot(t, NU*smallpik)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=3, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*3)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
+    axes[2].plot(t, 100*NU*smallpik)
 
     means = []
     for div0 in div0l:
@@ -947,14 +1561,14 @@ def plot_param_dividends(rad0=0.25, rad1=0.25, c=PIm/NU/100, win=0.005, nb=5):
                 0.3
             )*NU
             axes[0].plot(
-                smallpik*NU,
-                div,
+                100*smallpik*NU,
+                100*div,
                 linestyle="-",
                 color="k"
             )
             axes[1].plot(
                 t,
-                div,
+                100*div,
                 linestyle="-",
                 color="k"
             )
@@ -965,43 +1579,47 @@ def plot_param_dividends(rad0=0.25, rad1=0.25, c=PIm/NU/100, win=0.005, nb=5):
         0.3
     )*NU
     axes[0].plot(
-        smallpik*NU,
-        div,
+        100*smallpik*NU,
+        100*div,
         linestyle="-",
         color="r"
     )
     axes[1].plot(
         t,
-        div,
+        100*div,
         linestyle="-",
         color="r"
     )
     axes[1].plot(
         t,
-        div_that_should_be,
+        100*div_that_should_be,
         linestyle="--",
         color="r"
     )
     tip_val = np.mean(div[select])
 
     ylims = axes[0].get_ylim()
-    axes[0].fill_between([(c-win)*NU, (c+win)*NU], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    axes[0].fill_between([100*(c-win)*NU, 100*(c+win)*NU], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
-    axes[0].set_xlabel(r"profit to GDP ($\Pi/pY$)")
-    axes[0].set_ylabel(r"dividends rate (to GDP) ($\Delta$)")
-    axes[1].set_xlabel(r"time ($t$)")
-    axes[1].set_ylabel(r"dividends rate (to GDP) ($\Delta$)")
-    axes[2].set_ylabel(r"profit to GDP ($\Pi/pY$)")
-    axes[2].set_xlabel(r"time ($t$)")
+    axes[0].set_xlabel(r"profit ratio $\pi$ (%)")
+    axes[0].set_ylabel("dividends\n" + r"ratio $\Delta$ (%)")
+    #axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel("dividends\n" + r"ratio $\Delta$ (%)")
+    axes[1].tick_params(labelbottom=False)
+    axes[2].set_ylabel(r"profit ratio $\pi$ (%)")
+    axes[2].set_xlabel(r"time $t$ (y)")
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
     plot_param_aa("div0", DIV0, **a)
     plot_param_aa("div1", DIV1, **b)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("div.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_Gamma(rad=0.255, c=0.96, win=0.03, nb=5):
+def plot_param_Gamma(rad=0.255, c=0.96, win=0.03, nb=5, ax=''):
     """
     Plot te Gamma function.
 
@@ -1015,14 +1633,19 @@ def plot_param_Gamma(rad=0.255, c=0.96, win=0.03, nb=5):
     tcdebtratio = np.linspace(0., 0.99999*NU, 500)
     select = (tcdebtratio>(c-win)) * (tcdebtratio<(c+win))
 
-    fig, ax = plt.subplots()
+    pre_axes = ax==''
+    if pre_axes:
+        fig, ax = plt.subplots()
+    else:
+        print("using a pre-existing axis")
+
     means = []
     for k_scale in ks_list:
         gammad = 1. - np.exp(
             -k_scale*(tcdebtratio**2)/(NU**2 - tcdebtratio**2)
         )
         ax.plot(
-            tcdebtratio/NU,
+            100*tcdebtratio/NU,
             gammad,
             linestyle="-",
             color="k"
@@ -1032,7 +1655,7 @@ def plot_param_Gamma(rad=0.255, c=0.96, win=0.03, nb=5):
         -K_SCALE*(tcdebtratio**2)/(NU**2 - tcdebtratio**2)
     )
     ax.plot(
-        tcdebtratio/NU,
+        100*tcdebtratio/NU,
         gammad,
         linestyle="-",
         color="r"
@@ -1040,17 +1663,21 @@ def plot_param_Gamma(rad=0.255, c=0.96, win=0.03, nb=5):
     tip_val = np.mean(gammad[select])
 
     ylims = ax.get_ylim()
-    ax.fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
-    ax.set_xlabel(r"debt to capital ratio ($D/pK/\nu$)")
-    ax.set_ylabel(r"Gamma function ($\Gamma$)")
+    ax.fill_between([100*(c-win), 100*(c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    ax.set_xlabel(r"debt ratio $d/\nu$ (%)")
+    ax.set_ylabel('Gamma\n'+r"function $\Gamma$ ()")
+    ax.set_xlim(90, 100)
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
     plot_param_aa("k_scale", K_SCALE, **b)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        plt.tight_layout()
+        plt.savefig("Gamma.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_gammaw(rad=0.1, c=LAMm/100, win=0.02, nb=5):
+def plot_param_gammaw(rad=0.1, c=LAMm/100, win=0.02, nb=5, axes=""):
     """
     Plot the influence of gammaw on Phillips curve.
 
@@ -1075,59 +1702,74 @@ def plot_param_gammaw(rad=0.1, c=LAMm/100, win=0.02, nb=5):
     b_a = {"start":(1.-rad)*GAMMAW, "stop":(1.+rad)*GAMMAW}
     gammaw = np.linspace(**b_a, num=nb)
 
-    fig, axes = plt.subplots(nrows=3)
-    axes[2].plot(t, lams)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=3, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*3)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
+    axes[2].plot(t, 100*lams)
 
     means = []
     for n, i in enumerate(I):
         for gamma in gammaw:
             dat = PHI0 + PHI1*lams + gamma*i
             axes[0].plot(
-                lams,
-                dat,
+                100*lams,
+                100*dat,
                 linestyle="-",
                 color="k"
             )
             axes[1].plot(
                 t,
-                dat,
+                100*dat,
                 linestyle="-",
                 color="k"
             )
             if n==I.size-1:
                 means.append(np.mean(dat[select]))
         axes[0].plot(
-            lams,
-            PHI0 + PHI1*lams + GAMMAW*i,
+            100*lams,
+            100*(PHI0 + PHI1*lams + GAMMAW*i),
             linestyle="-",
             color="r"
         )
         axes[1].plot(
             t,
-            PHI0 + PHI1*lams + GAMMAW*i,
+            100*(PHI0 + PHI1*lams + GAMMAW*i),
             linestyle="-",
             color="r"
         )
         if n==I.size-1:
             tip_val = np.mean(dat[select])
-           
-    ylims = axes[0].get_ylim()
-    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
-    axes[0].set_xlabel(r"employment ($\lambda$)")
-    axes[0].set_ylabel(r"Phillips curve ($\varphi$)")
-    axes[1].set_xlabel(r"time ($t$)")
-    axes[1].set_ylabel(r"Phillips curve ($\varphi$)")
-    axes[2].set_ylabel(r"employment ($\lambda$)")
-    axes[2].set_xlabel(r"time ($t$)")
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([100*(c-win), 100*(c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel("employment\n" + r"rate $\lambda$ (%)")
+    axes[0].set_ylabel(r"Phillips curve $\varphi$ (%)")
+    #axes[1].set_xlabel(r"time ($t$)")
+    axes[1].set_ylabel(r"Phillips curve $\varphi$ (%)")
+    axes[1].tick_params(labelbottom=False)
+    axes[2].set_ylabel("employment\n" + r"rate $\lambda$ (%)")
+    axes[2].set_xlabel(r"time $t$ (y)")
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
     plot_param_aa("gammaw", GAMMAW, **b_a)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("gammaw.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_inflation(rad0=0.02, rad1=0.15, c=OMEGAm/100, win=0.015, nb=5):
+def plot_param_inflation(rad0=0.02, rad1=0.15, c=OMEGAm/100, win=0.015, nb=5, axes=''):
     """
     plot inflation depending on eta and mu
 
@@ -1150,16 +1792,28 @@ def plot_param_inflation(rad0=0.02, rad1=0.15, c=OMEGAm/100, win=0.015, nb=5):
     mul = np.linspace(**a, num=nb)
     etal = np.linspace(**b, num=nb)
 
-    fig, axes = plt.subplots(nrows=4)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=4, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*4)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+        axes.append(fig.add_subplot(G[3], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
     axes[2].plot(
         t,
-        omega,
+        100*omega,
         linestyle="-",
         color="k"
     )
     axes[3].plot(
         t,
-        smallpik,
+        100*smallpik,
         linestyle="-",
         color="k"
     )
@@ -1168,14 +1822,14 @@ def plot_param_inflation(rad0=0.02, rad1=0.15, c=OMEGAm/100, win=0.015, nb=5):
         for eta in etal:
             i = eta * ( (mu + smallpik) * omega - 1.)
             axes[0].plot(
-                omega,
-                i,
+                100*omega,
+                100*i,
                 linestyle="-",
                 color="k"
             )
             axes[1].plot(
                 t, #omega,
-                i,
+                100*i,
                 linestyle="-",
                 color="k"
             )
@@ -1183,30 +1837,32 @@ def plot_param_inflation(rad0=0.02, rad1=0.15, c=OMEGAm/100, win=0.015, nb=5):
 
     i = ETA * ( (MU + smallpik) * omega - 1.)
     axes[0].plot(
-        omega,
-        i,
+        100*omega,
+        100*i,
         linestyle="-",
         color="r"
     )
     axes[1].plot(
         t, #omega,
-        i,
+        100*i,
         linestyle="-",
         color="r"
     )
     tip_val = np.mean(i[select])
- 
-    ylims = axes[0].get_ylim()
-    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
-    axes[0].set_xlabel(r"wage share ($\omega$)")
-    axes[0].set_ylabel(r"inflation ($i$)")
-    axes[1].set_ylabel(r"inflation ($i$)")
-    axes[1].set_xlabel(r"time ($t$)")
-    axes[2].set_ylabel(r"wage share ($\omega$)")
-    axes[2].set_xlabel(r"time ($t$)")
-    axes[3].set_ylabel(r"profit to capital ratio ($\Pi / p K$)")
-    axes[3].set_xlabel(r"time ($t$)")
+    ylims = axes[0].get_ylim()
+    axes[0].fill_between([100*(c-win), 100*(c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+
+    axes[0].set_xlabel(r"wage share $\omega$ (%)")
+    axes[0].set_ylabel("inflation\n" + r"rate $i$ (%)")
+    axes[1].set_ylabel("inflation\n" + r"rate $i$ (%)")
+    #axes[1].set_xlabel(r"time ($t$)")
+    axes[1].tick_params(labelbottom=False)
+    axes[2].set_ylabel(r"wage" + '\n' + "share $\omega$ (%)")
+    #axes[2].set_xlabel(r"time ($t$)")
+    axes[2].tick_params(labelbottom=False)
+    axes[3].set_ylabel(r"profit to capital" + '\n' + r"ratio $\pi / \nu$ (%)")
+    axes[3].set_xlabel(r"time $t$ (y)")
     for ax in axes[:-2]:
         ax.plot(
             list(ax.get_xlim()),
@@ -1219,10 +1875,13 @@ def plot_param_inflation(rad0=0.02, rad1=0.15, c=OMEGAm/100, win=0.015, nb=5):
     plot_param_aa("mu", MU, **a)
     plot_param_aa("eta", ETA, **b)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("inflation.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_investment(rad0=0.25, rad1=0.25, c=KAPPAm/100, win=0.02, nb=5):
+def plot_param_investment(rad0=0.25, rad1=0.25, c=KAPPAm/100, win=0.02, nb=5, axes=''):
     """
     Plot investment functions
 
@@ -1258,10 +1917,23 @@ def plot_param_investment(rad0=0.25, rad1=0.25, c=KAPPAm/100, win=0.02, nb=5):
     smallpi = (PIm + PIa * np.exp(-t/T1) * np.sin(2.*np.pi*t/T0))/100
     select = (smallpi>(c-win)) * (smallpi<(c+win))
 
-    fig, axes = plt.subplots(nrows=5)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=5, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*5)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+        axes.append(fig.add_subplot(G[3], sharex=axes[1]))
+        axes.append(fig.add_subplot(G[4], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
     axes[2].plot(t, [0.]*t.size, color="gray", linestyle="--")
-    axes[3].plot(t, smallpi)
-    axes[4].plot(t, tcdebtratio/NU*100)
+    axes[3].plot(t, 100*smallpi)
+    axes[4].plot(t, 100*tcdebtratio/NU)
     axes[4].plot([t[0], t[-1]], [100., 100.])
 
     means = []
@@ -1274,20 +1946,20 @@ def plot_param_investment(rad0=0.25, rad1=0.25, c=KAPPAm/100, win=0.02, nb=5):
             kappapi = np.clip(kappapi, KAPPAMIN, KAPPAMAX)
 
             axes[0].plot(
-                smallpi,
-                kappapi,
+                100*smallpi,
+                100*kappapi,
                 color="k",
                 linestyle="-",
             )
             axes[1].plot(
                 t,
-                kappapi,
+                100*kappapi,
                 color="k",
                 linestyle="-",
             )
             axes[2].plot(
                 t,
-                kappapi/NU - DELTA,
+                100*(kappapi/NU - DELTA),
                 color="k",
                 linestyle="-",
             )
@@ -1298,47 +1970,53 @@ def plot_param_investment(rad0=0.25, rad1=0.25, c=KAPPAm/100, win=0.02, nb=5):
     kappapi = kappapi*(tmp)**POW
     kappapi = np.clip(kappapi, KAPPAMIN, KAPPAMAX)
     axes[0].plot(
-        smallpi,
-        kappapi,
+        100*smallpi,
+        100*kappapi,
         color="r",
         linestyle="-",
-    )    
+    )
     axes[1].plot(
         t,
-        kappapi,
+        100*kappapi,
         color="r",
         linestyle="-",
-    )    
+    )
     axes[2].plot(
         t,
-        kappapi/NU - DELTA,
+        100*(kappapi/NU - DELTA),
         color="r",
         linestyle="-",
-    )    
+    )
     tip_val = np.mean(kappapi[select])
 
     ylims = axes[0].get_ylim()
-    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    axes[0].fill_between([100*(c-win), 100*(c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
-    axes[0].set_xlabel(r"profit to GDP ($\pi$)")
-    axes[0].set_ylabel(r"investment rate (to GDP) ($\kappa$)")
-    axes[1].set_xlabel(r"time $t$)")
-    axes[1].set_ylabel(r"investment rate (to GDP) ($\kappa$)")
-    axes[2].set_xlabel(r"time $t$)")
-    axes[2].set_ylabel(r"growth rate ($g$)")
-    axes[3].set_ylabel(r"profit to GDP ($\pi$)")
-    axes[3].set_xlabel(r"time ($t$)")
-    axes[4].set_ylabel(r"debt to capital ratio ($d/\nu$)")
-    axes[4].set_xlabel(r"time ($t$)")
+    axes[0].set_xlabel(r"profit ratio $\pi$ (%)")
+    axes[0].set_ylabel("investment\n" + r"ratio $\kappa$ (%)")
+    #axes[1].set_xlabel(r"time $t$)")
+    axes[1].tick_params(labelbottom=False)
+    axes[1].set_ylabel("investment\n" + r"ratio $\kappa$ (%)")
+    axes[2].tick_params(labelbottom=False)
+    #axes[2].set_xlabel(r"time $t$)")
+    axes[2].set_ylabel(r"growth" + '\n' + "rate $g$ (%)")
+    axes[3].set_ylabel("profit\n" + r"ratio $\pi$ (%)")
+    #axes[3].set_xlabel(r"time ($t$)")
+    axes[3].tick_params(labelbottom=False)
+    axes[4].set_ylabel("debt to capital\n" r"ratio $d/\nu$ (%)")
+    axes[4].set_xlabel(r"time $t$ (y)")
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
     plot_param_aa("kappa0", KAPPA0, **a)
     plot_param_aa("kappa1", KAPPA1, **b)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("investment.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_phillips(rad0=0.006, rad1=0.035, c=LAMm/100, win=0.005, nb=5):
+def plot_param_phillips(rad0=0.006, rad1=0.035, c=LAMm/100, win=0.005, nb=5, axes=""):
     """
     Plot the phillips curve.
 
@@ -1362,10 +2040,21 @@ def plot_param_phillips(rad0=0.006, rad1=0.035, c=LAMm/100, win=0.005, nb=5):
     a = {"start":(1.-rad0)*PHI0, "stop":(1.+rad0)*PHI0}
     b = {"start":max(0., (1.-rad1)*PHI1), "stop":(1.+rad1)*PHI1}
 
-    fig, axes = plt.subplots(nrows=3)
+    pre_axes = axes==''
+    if pre_axes:
+        fig = plt.figure()
+        G = GridSpec(nrows=3, ncols=1, figure=fig, width_ratios=[1], height_ratios=[1]*3)
+        axes = [
+            fig.add_subplot(G[0]),
+            fig.add_subplot(G[1]),
+        ]
+        axes.append(fig.add_subplot(G[2], sharex=axes[1]))
+    else:
+        print("using a pre-existing axis")
+
     axes[2].plot(
         t,
-        lams
+        100*lams
     )
 
     phi0 = np.linspace(**a, num=nb)
@@ -1375,37 +2064,38 @@ def plot_param_phillips(rad0=0.006, rad1=0.035, c=LAMm/100, win=0.005, nb=5):
         for m, p1 in enumerate(phi1):
             phi = phi0[n] + phi1[m]*lams
             axes[0].plot(
-                lams,
-                phi,
+                100*lams,
+                100*phi,
                 color="k",
                 linestyle="-",
             )
             axes[1].plot(
                 t,
-                phi,
+                100*phi,
                 color="k",
                 linestyle="-",
             )
             means.append(np.mean(phi[select]))
     axes[0].plot(
-        lams,
-        PHI0 + PHI1*lams,
+        100*lams,
+        100*(PHI0 + PHI1*lams),
         color="r"
     )
     axes[1].plot(
         t,
-        PHI0 + PHI1*lams,
+        100*(PHI0 + PHI1*lams),
         color="r",
         linestyle="-",
     )
     tip_val = np.mean(phi[select])
 
-    axes[0].set_ylabel(r"Phillips curve ($\varphi$)")
-    axes[0].set_xlabel(r"employment ($\lambda$)")
-    axes[1].set_ylabel(r"Phillips curve ($\varphi$)")
-    axes[1].set_xlabel(r"time ($t$)")
-    axes[2].set_xlabel(r" (time $t$)")
-    axes[2].set_ylabel(r"employment ($\lambda$)")
+    axes[0].set_ylabel(r"Phillips curve $\varphi$ (%)")
+    axes[0].set_xlabel("employment\n" + r"rate $\lambda$ (%)")
+    axes[1].set_ylabel(r"Phillips curve $\varphi$ (%)")
+    #axes[1].set_xlabel(r"time ($t$)")
+    axes[1].tick_params(labelbottom=False)
+    axes[2].set_xlabel(r"time $t$ (y)")
+    axes[2].set_ylabel("employment\n" + r"rate $\lambda$ (%)")
 
     for ax in axes[:-1]:
         ax.plot(
@@ -1416,16 +2106,19 @@ def plot_param_phillips(rad0=0.006, rad1=0.035, c=LAMm/100, win=0.005, nb=5):
         )
 
     ylims = axes[0].get_ylim()
-    axes[0].fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
+    axes[0].fill_between([100*(c-win), 100*(c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
     print("\nwindow size = {:.1f} %".format((np.max(means)-np.min(means))/tip_val*100))
     plot_param_aa("phi0", PHI0, **a)
     plot_param_aa("phi1", PHI1, **b)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        G.tight_layout(fig, pad=0.)
+        plt.savefig("phillips.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_param_population(rad0=0.6, rad1=0.075, c=2100, win=10, nb=5):
+def plot_param_population(rad0=0.6, rad1=0.075, c=2100, win=10, nb=5, ax=''):
     """
     Plot the population trajectories.
     15-56 ans
@@ -1446,7 +2139,12 @@ def plot_param_population(rad0=0.6, rad1=0.075, c=2100, win=10, nb=5):
     deltanpop = np.linspace(**a, num=nb)
     npopbar = np.linspace(**b, num=nb)
 
-    fig, ax = plt.subplots()
+    pre_axes = ax==''
+    if pre_axes:
+        fig, ax = plt.subplots()
+    else:
+        print("using a pre-existing axis")
+
     k = 0
     means = []
     for delta in deltanpop:
@@ -1462,8 +2160,9 @@ def plot_param_population(rad0=0.6, rad1=0.075, c=2100, win=10, nb=5):
     select = (pop[:,0]>(c-win)) * (pop[:,0]<(c+win))
     tip_val = np.mean(pop[select, 1])
 
-    ax.set_xlabel(r"time")
-    ax.set_ylabel(r"population ($N$)")
+    ax.set_xlabel(r"time $t$ (y)")
+    ax.set_ylabel(r"population $N$"+"\n(tril. human beings)")
+    ax.set_xlim(2000, 2400)
     ylims = ax.get_ylim()
     ax.fill_between([(c-win), (c+win)], ylims[0], ylims[1], color="k", alpha=0.25, zorder=100)
 
@@ -1471,10 +2170,13 @@ def plot_param_population(rad0=0.6, rad1=0.075, c=2100, win=10, nb=5):
     plot_param_aa("delta n pop", DELTANPOP, **a)
     plot_param_aa("n pop ax", NPOPBAR, **b)
 
-    plt.show()
-    plt.close(fig)
+    if pre_axes:
+        #plt.show()
+        plt.tight_layout()
+        plt.savefig("population.pdf", bbox_inches='tight')
+        plt.close(fig)
 
-def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.pdf", show=False):
+def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.svg", skip_outs=["relaxation_time_inf", "relaxation_time_sup"], show=False):
     """
     Plots sa_class.
 
@@ -1485,6 +2187,8 @@ def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.pdf", show=
             path of data
         figure_name : string
             file name
+        skip_outs : list (string)
+
         show : boolean
             if True, show, else save fig
     """
@@ -1503,6 +2207,9 @@ def plot_sa_class(sa_class, path, ylims=[-0.1, 1.1], figure_name="sa.pdf", show=
     plt.tight_layout(**PADS)
 
     fig = plt.gcf()
+    axes = fig.get_axes()
+    size = fig.get_size_inches()
+    fig.set_size_inches(1.5*size[0], size[1])
     perso_savefig(fig, path, figure_name, show)
 
 def set_ylims(select, raw, ax):
